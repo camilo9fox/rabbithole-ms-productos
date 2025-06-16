@@ -778,18 +778,67 @@ private void actualizarElemento(ElementoDTO elementoDTO, AnguloDiseno anguloExis
     private void limpiarRecursosElementoImagen(ElementoImagen elementoImagen) {
         if (elementoImagen == null) return;
         
-        // Limpiar CloudinaryResource si existe
-        CloudinaryResource cloudinaryResource = elementoImagen.getCloudinaryResource();
-        if (cloudinaryResource != null) {
-            eliminarCloudinaryResourceSeguro(cloudinaryResource, "CloudinaryResource");
-        } 
-        // Para compatibilidad con elementos antiguos
-        else if (elementoImagen.getPublicId() != null && !elementoImagen.getPublicId().isEmpty()) {
-            eliminarImagenPorPublicIdSeguro(elementoImagen.getPublicId());
+        // Guardamos una referencia al CloudinaryResource antes de eliminarlo
+        CloudinaryResource cloudinaryResourceToDelete = null;
+        String publicIdToDelete = null;
+        
+        // Verificar primero que el ElementoImagen exista en la BD
+        boolean elementoExiste = elementoImagenRepository.existsById(elementoImagen.getId());
+        if (!elementoExiste) {
+            log.info("ElementoImagen ID={} ya no existe, no se elimina", elementoImagen.getId());
+            return;
         }
         
-        // Eliminar el elemento imagen de la BD
-        elementoImagenRepository.delete(elementoImagen);
+        try {
+            // Guardar referencias antes de eliminar
+            if (elementoImagen.getCloudinaryResource() != null) {
+                cloudinaryResourceToDelete = elementoImagen.getCloudinaryResource();
+                // Desconectamos la instancia de CloudinaryResource del contexto de persistencia
+                // para evitar que se actualice automáticamente
+                if (cloudinaryResourceToDelete != null && cloudinaryResourceToDelete.getId() != null) {
+                    cloudinaryResourceToDelete = cloudinaryResourceRepository.findById(
+                            cloudinaryResourceToDelete.getId()).orElse(null);
+                    log.info("Referencia a CloudinaryResource ID={} guardada para eliminación posterior", 
+                           cloudinaryResourceToDelete.getId());
+                }
+            } 
+            else if (elementoImagen.getPublicId() != null && !elementoImagen.getPublicId().isEmpty()) {
+                publicIdToDelete = elementoImagen.getPublicId();
+            }
+            
+            // Lo importante: primero eliminamos el ElementoImagen que contiene la FK
+            log.info("Eliminando ElementoImagen ID={}", elementoImagen.getId());
+            elementoImagenRepository.deleteById(elementoImagen.getId());
+            
+            // Ahora que el ElementoImagen ya no existe en la BD, eliminamos el recurso en Cloudinary
+            if (cloudinaryResourceToDelete != null && cloudinaryResourceToDelete.getId() != null) {
+                try {
+                    log.info("Eliminando CloudinaryResource ID={}", cloudinaryResourceToDelete.getId());
+                    // Usar directamente el servicio para no afectar la transacción principal
+                    if (cloudinaryResourceToDelete.getPublicId() != null) {
+                        cloudinaryImageProcessor.eliminarImagen(cloudinaryResourceToDelete.getPublicId());
+                    }
+                    cloudinaryResourceRepository.deleteById(cloudinaryResourceToDelete.getId());
+                    log.info("CloudinaryResource ID={} eliminado exitosamente", cloudinaryResourceToDelete.getId());
+                } catch (Exception ex) {
+                    log.warn("No se pudo eliminar CloudinaryResource ID={}: {}", 
+                            cloudinaryResourceToDelete.getId(), ex.getMessage());
+                }
+            } 
+            else if (publicIdToDelete != null) {
+                try {
+                    log.info("Eliminando imagen por publicId: {}", publicIdToDelete);
+                    cloudinaryImageProcessor.eliminarImagen(publicIdToDelete);
+                } catch (Exception ex) {
+                    log.warn("No se pudo eliminar imagen con publicId {}: {}", 
+                            publicIdToDelete, ex.getMessage());
+                }
+            }
+        } catch (Exception e) {
+            log.error("Error al limpiar recursos de ElementoImagen ID={}: {}", 
+                      elementoImagen.getId(), e.getMessage());
+            throw e; // Re-lanzamos la excepción para manejar correctamente la transacción
+        }
     }
     
     /**
