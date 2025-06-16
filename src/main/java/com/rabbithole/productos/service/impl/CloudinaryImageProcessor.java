@@ -36,13 +36,13 @@ public class CloudinaryImageProcessor {
      * @return Mapa con los datos de la imagen subida (url, publicId, etc), o map vacío si no hay imagen
      * @throws ImageProcessingException Si ocurre un error al subir la imagen
      */
-    public Map<String, Object> procesarYSubirImagenBase64(String base64Image) throws ImageProcessingException {
+    public Map<String, Object> procesarYSubirImagenBase64(String base64Image, String type) throws ImageProcessingException {
         if (base64Image == null || base64Image.isEmpty()) {
             return ObjectUtils.emptyMap();
         }
         
         // Si no es una imagen base64 (ya es una URL de Cloudinary), retornamos
-        if (!base64Image.startsWith("data:") && !base64Image.startsWith("/9j/")) {
+        if (!Base64ImageUtil.isValidBase64(base64Image)) {
             return ObjectUtils.emptyMap();
         }
         
@@ -51,7 +51,12 @@ public class CloudinaryImageProcessor {
             MultipartFile multipartFile = Base64ImageUtil.createMultipartFileFromBase64(base64Image);
             
             // Subir a Cloudinary
-            return cloudinaryService.uploadElementoImagen(multipartFile);
+            if(type == "elementoImagen"){
+                return cloudinaryService.uploadElementoImagen(multipartFile);
+            }
+            else{
+                return cloudinaryService.uploadAnguloThumbnail(multipartFile);
+            }
         } catch (IOException e) {
             throw new ImageProcessingException("Error al procesar y subir imagen base64", e);
         }

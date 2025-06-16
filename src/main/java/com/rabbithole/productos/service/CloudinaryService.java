@@ -23,7 +23,7 @@ public class CloudinaryService {
     private final Cloudinary cloudinary;
     
     private static final String ELEMENTOS_FOLDER = "elementos_imagen";
-    private static final String THUMBNAILS_FOLDER = "thumbnails_angulos";
+    private static final String THUMBNAILS_FOLDER = "thumbnails";
     private static final String FOLDER_PARAM = "folder";
     private static final String RESOURCE_TYPE_PARAM = "resource_type";
     private static final String AUTO_PARAM = "auto";

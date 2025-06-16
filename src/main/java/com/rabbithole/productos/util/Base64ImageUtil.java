@@ -114,4 +114,18 @@ public class Base64ImageUtil {
         
         return new Base64MultipartFile(imageBytes, "file", filename, imageType);
     }
+
+
+        public static boolean isValidBase64(String str) {
+            if (str == null || str.length() % 4 != 0) { // Longitud debe ser múltiplo de 4
+                return false;
+            }
+            
+            try {
+                Base64.getDecoder().decode(str);
+                return true;
+            } catch (IllegalArgumentException e) {
+                return false;
+            }
+        }
 }

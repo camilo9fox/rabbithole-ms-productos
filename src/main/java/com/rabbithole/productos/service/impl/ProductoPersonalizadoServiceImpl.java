@@ -10,19 +10,26 @@ import com.rabbithole.productos.repository.*;
 import com.rabbithole.productos.exception.DisenoProcesamientoException;
 import com.rabbithole.productos.service.CloudinaryResourceService;
 import com.rabbithole.productos.service.ProductoPersonalizadoService;
+import com.rabbithole.productos.util.Base64ImageUtil;
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
+
+import com.cloudinary.utils.ObjectUtils;
 
 // Importaciones sin cambios
 import com.rabbithole.productos.exception.ImageProcessingException;
 import java.math.BigDecimal;
-import java.time.LocalDateTime;
 import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
 
 /**
  * Implementación del servicio para productos personalizados
@@ -215,25 +222,74 @@ public class ProductoPersonalizadoServiceImpl implements ProductoPersonalizadoSe
                     }
                     
                     // Actualizar thumbnail si ha cambiado
-                    if (anguloDTO.getThumbnailUrl() != null && 
+                    if (anguloDTO.getThumbnailBase64() != null && 
                         (anguloExistente.getThumbnailResource() == null || 
-                         !anguloDTO.getThumbnailUrl().equals(anguloExistente.getThumbnailResource().getUrlImagen()))) {
+                         !anguloDTO.getThumbnailBase64().equals(anguloExistente.getThumbnailResource().getUrlImagen()))) {
                         
-                        // En lugar de eliminar y recrear, actualizamos el recurso existente o creamos uno nuevo
-                        CloudinaryResource thumbnailResource;
-                        
-                        if (anguloExistente.getThumbnailResource() != null) {
-                            thumbnailResource = anguloExistente.getThumbnailResource();
-                            thumbnailResource.setUrlImagen(anguloDTO.getThumbnailUrl());
-                            thumbnailResource.setPublicId(extraerPublicIdDeUrl(anguloDTO.getThumbnailUrl()));
-                            thumbnailResource = cloudinaryResourceRepository.save(thumbnailResource);
-                        } else {
-                            thumbnailResource = new CloudinaryResource();
-                            thumbnailResource.setUrlImagen(anguloDTO.getThumbnailUrl());
-                            thumbnailResource.setPublicId(extraerPublicIdDeUrl(anguloDTO.getThumbnailUrl()));
-                            thumbnailResource = cloudinaryResourceRepository.save(thumbnailResource);
+                        try {
+                            // Guardar el recurso anterior para eliminarlo después si es necesario
+                            CloudinaryResource oldResource = anguloExistente.getThumbnailResource();
+                            CloudinaryResource thumbnailResource;
+                            
+                            // Verificar si es una imagen base64
+                            if (Base64ImageUtil.isValidBase64(anguloDTO.getThumbnailBase64())) {
+                                log.info("Detectada imagen Base64 en thumbnail. Procesando...");
+                                
+                                // Procesar imagen base64 y subirla a Cloudinary
+                                Map<String, Object> result = cloudinaryImageProcessor.procesarYSubirImagenBase64(anguloDTO.getThumbnailBase64(), "angulo");
+                                // Crear un nuevo CloudinaryResource con los datos de Cloudinary
+                                thumbnailResource = new CloudinaryResource();
+                                thumbnailResource.setUrlImagen((String) result.get("url"));
+                                thumbnailResource.setPublicId((String) result.get("public_id"));
+                            } else {
+                                // Es una URL normal, actualizar normalmente
+                                if (anguloExistente.getThumbnailResource() != null) {
+                                    thumbnailResource = anguloExistente.getThumbnailResource();
+                                    thumbnailResource.setUrlImagen(anguloDTO.getThumbnailUrl());
+                                    
+                                    // Extraer publicId y verificar que no sea nulo
+                                    String publicId = extraerPublicIdDeUrl(anguloDTO.getThumbnailUrl());
+                                    if (publicId == null || publicId.trim().isEmpty()) {
+                                        if (thumbnailResource.getPublicId() == null || thumbnailResource.getPublicId().trim().isEmpty()) {
+                                            publicId = "generated_" + System.currentTimeMillis();
+                                            log.warn("Se generó un publicId ({}) para thumbnail porque no se pudo extraer de la URL", publicId);
+                                        } else {
+                                            publicId = thumbnailResource.getPublicId();
+                                            log.info("Se mantuvo el publicId existente para thumbnail: {}", publicId);
+                                        }
+                                    }
+                                    thumbnailResource.setPublicId(publicId);
+                                } else {
+                                    thumbnailResource = new CloudinaryResource();
+                                    thumbnailResource.setUrlImagen(anguloDTO.getThumbnailUrl());
+                                    
+                                    String publicId = extraerPublicIdDeUrl(anguloDTO.getThumbnailUrl());
+                                    if (publicId == null || publicId.trim().isEmpty()) {
+                                        publicId = "generated_" + System.currentTimeMillis();
+                                        log.warn("Se generó un publicId ({}) para nuevo thumbnail porque no se pudo extraer de la URL", publicId);
+                                    }
+                                    thumbnailResource.setPublicId(publicId);
+                                }
+                            }
+                            
+                            // Guardar el recurso y asignarlo al ángulo usando el método auxiliar para evitar error ORA-01461
+                            thumbnailResource = guardarOActualizarCloudinaryResource(thumbnailResource);
+                            anguloExistente.setThumbnailResource(thumbnailResource);
+                            
+                            // Eliminar el recurso anterior de Cloudinary si existe
+                            if (oldResource != null && oldResource.getPublicId() != null) {
+                                try {
+                                    cloudinaryImageProcessor.eliminarImagen(oldResource.getPublicId());
+                                    cloudinaryResourceRepository.delete(oldResource);
+                                    log.info("Thumbnail anterior eliminado de Cloudinary: {}", oldResource.getPublicId());
+                                } catch (Exception e) {
+                                    log.warn("No se pudo eliminar el thumbnail anterior de Cloudinary: {}", oldResource.getPublicId(), e);
+                                }
+                            }
+                        } catch (Exception e) {
+                            log.error("Error al procesar thumbnail: {}", e.getMessage(), e);
+                            throw new ImageProcessingException("Error al procesar thumbnail", e);
                         }
-                        anguloExistente.setThumbnailResource(thumbnailResource);
                     }
                     
                     // Actualizar elemento (texto o imagen) según el tipo
@@ -268,161 +324,278 @@ public class ProductoPersonalizadoServiceImpl implements ProductoPersonalizadoSe
     }
     
     /**
-     * Actualiza el elemento (imagen o texto) de un ángulo existente
-     * @param elementoDTO DTO con los datos nuevos
-     * @param anguloExistente Ángulo a actualizar
-     */
-    private void actualizarElemento(ElementoDTO elementoDTO, AnguloDiseno anguloExistente) {
-        if ("IMAGEN".equalsIgnoreCase(elementoDTO.getTipo())) {
-            ElementoImagen elementoImagen;
-            
-            // Actualizar o crear el elemento imagen
-            if (anguloExistente.getElementoImagen() != null) {
-                elementoImagen = anguloExistente.getElementoImagen();
-            } else {
-                elementoImagen = new ElementoImagen();
-            }
-            
-            // Actualizar propiedades de diseño del elemento imagen (posición, tamaño, etc.)
-            if (elementoDTO.getPropiedadesDiseno() != null) {
-                ElementoDisenoDTO propiedadesDiseno = elementoDTO.getPropiedadesDiseno();
-                
-                if (propiedadesDiseno.getPosicionX() != null) {
-                    elementoImagen.setPosicionX(propiedadesDiseno.getPosicionX().intValue());
-                }
-                if (propiedadesDiseno.getPosicionY() != null) {
-                    elementoImagen.setPosicionY(propiedadesDiseno.getPosicionY().intValue());
-                }
-                if (propiedadesDiseno.getAnchura() != null) {
-                    elementoImagen.setAnchura(propiedadesDiseno.getAnchura().intValue());
-                }
-                if (propiedadesDiseno.getAltura() != null) {
-                    elementoImagen.setAltura(propiedadesDiseno.getAltura().intValue());
-                }
-                if (propiedadesDiseno.getRotacion() != null) {
-                    elementoImagen.setRotacion(propiedadesDiseno.getRotacion());
-                }
-            }
-            
-            // Actualizar propiedades específicas del elemento imagen (URL, etc.)
-            if (elementoDTO.getPropiedadesElemento() != null) {
-                Map<String, Object> propiedades = elementoDTO.getPropiedadesElemento();
-                
-                // Obtener URL de la imagen
-                Object urlObj = propiedades.get("url");
-                String url = urlObj != null ? urlObj.toString() : null;
-                
-                if (url != null && !url.isEmpty()) {
-                    // Si ya hay un recurso, actualizarlo en lugar de crear uno nuevo
-                    CloudinaryResource cloudinaryResource;
-                    if (elementoImagen.getCloudinaryResource() != null) {
-                        cloudinaryResource = elementoImagen.getCloudinaryResource();
-                        cloudinaryResource.setUrlImagen(url);
-                        cloudinaryResource.setPublicId(extraerPublicIdDeUrl(url));
-                        cloudinaryResource = cloudinaryResourceRepository.save(cloudinaryResource);
-                    } else {
-                        cloudinaryResource = new CloudinaryResource();
-                        cloudinaryResource.setUrlImagen(url);
-                        cloudinaryResource.setPublicId(extraerPublicIdDeUrl(url));
-                        cloudinaryResource = cloudinaryResourceRepository.save(cloudinaryResource);
-                    }
-                    elementoImagen.setCloudinaryResource(cloudinaryResource);
-                }
-            }
-            
-            // Guardar el elemento imagen
-            elementoImagen = elementoImagenRepository.save(elementoImagen);
-            anguloExistente.setElementoImagen(elementoImagen);
-            anguloExistente.setElementoTexto(null); // Asegurar que no hay un elemento de texto
-            
-        } else if ("TEXTO".equalsIgnoreCase(elementoDTO.getTipo())) {
-            ElementoTexto elementoTexto;
-            
-            // Actualizar o crear el elemento texto
-            if (anguloExistente.getElementoTexto() != null) {
-                elementoTexto = anguloExistente.getElementoTexto();
-            } else {
-                elementoTexto = new ElementoTexto();
-            }
-            
-            // Actualizar propiedades de diseño del elemento texto (posición, tamaño, etc.)
-            if (elementoDTO.getPropiedadesDiseno() != null) {
-                ElementoDisenoDTO propiedadesDiseno = elementoDTO.getPropiedadesDiseno();
-                
-                if (propiedadesDiseno.getPosicionX() != null) {
-                    elementoTexto.setPosicionX(propiedadesDiseno.getPosicionX().intValue());
-                }
-                if (propiedadesDiseno.getPosicionY() != null) {
-                    elementoTexto.setPosicionY(propiedadesDiseno.getPosicionY().intValue());
-                }
-            }
-            
-            // Actualizar propiedades específicas del elemento texto (contenido, fuente, color, etc.)
-            if (elementoDTO.getPropiedadesElemento() != null) {
-                Map<String, Object> propiedades = elementoDTO.getPropiedadesElemento();
-                
-                // Actualizar contenido del texto
-                Object contenidoObj = propiedades.get("contenido");
-                if (contenidoObj != null) {
-                    elementoTexto.setContenido(contenidoObj.toString());
-                }
-                
-                // Manejar la fuente - ElementoTexto tiene un objeto Fuente, no un String
-                Object fuenteObj = propiedades.get("fuente");
-                if (fuenteObj != null) {
-                    // Buscar la fuente por ID en lugar de crear una nueva
-                    Long fuenteId = 1L; // ID por defecto
-                    if (fuenteObj instanceof Number) {
-                        fuenteId = ((Number) fuenteObj).longValue();
-                    } else if (fuenteObj instanceof String) {
-                        try {
-                            fuenteId = Long.parseLong((String) fuenteObj);
-                        } catch (NumberFormatException e) {
-                            log.warn("No se pudo convertir la fuente '{}' a Long, usando valor por defecto", fuenteObj);
-                        }
-                    }
-                    
-                    // Buscar fuente existente usando el repositorio para evitar problemas de entidad transitoria
-                    Fuente fuente = fuenteRepository.findById(fuenteId)
-                        .orElseGet(() -> {
-                            // Si no encontramos la fuente, usar la fuente por defecto
-                            return fuenteRepository.findAll().stream().findFirst()
-                                .orElseThrow(() -> new IllegalStateException("No hay fuentes configuradas en el sistema"));
-                        });
-                    elementoTexto.setFuente(fuente);
-                }
-                
-                // Manejar el color - ElementoTexto tiene un objeto Color, no un String
-                Object colorObj = propiedades.get("color");
-                if (colorObj != null) {
-                    // Buscar el color por ID en lugar de crear uno nuevo
-                    String colorId = "1"; // ID por defecto
-                    if (colorObj instanceof String) {
-                        colorId = (String) colorObj;
-                    }
-                    // Buscar color existente usando el repositorio para evitar problemas de entidad transitoria
-                    Color color = colorRepository.findById(colorId)
-                        .orElseGet(() -> {
-                            // Si no encontramos el color, usar el color por defecto (podríamos obtenerlo del primer color disponible)
-                            return colorRepository.findAll().stream().findFirst()
-                                .orElseThrow(() -> new IllegalStateException("No hay colores configurados en el sistema"));
-                        });
-                    elementoTexto.setColorTexto(color);
-                }
-                
-                // ElementoTexto usa 'tamanoFuente' en lugar de 'tamanoTexto'
-                Object tamanoObj = propiedades.get("tamanoTexto");
-                if (tamanoObj instanceof Number) {
-                    elementoTexto.setTamanoFuente(((Number) tamanoObj).intValue());
-                }
-            }
-            
-            // Guardar el elemento texto
-            elementoTexto = elementoTextoRepository.save(elementoTexto);
-            anguloExistente.setElementoTexto(elementoTexto);
-            anguloExistente.setElementoImagen(null); // Asegurar que no hay un elemento de imagen
-        }
+ * SOLUCIÓN PROPUESTA:
+ * Este archivo contiene el método "actualizarElemento" modificado para resolver
+ * los problemas con la gestión de imágenes en Cloudinary
+ */
+
+/**
+ * Actualiza un elemento (imagen o texto) de un ángulo
+ * @param elementoDTO El DTO con los datos del elemento
+ * @param anguloExistente El ángulo al que pertenece el elemento
+ */
+private void actualizarElemento(ElementoDTO elementoDTO, AnguloDiseno anguloExistente) {
+    // IMPORTANTE: Primero verificamos si estamos cambiando el tipo de elemento
+    // Si teníamos un ElementoImagen y ahora queremos un ElementoTexto, debemos limpiar los recursos del ElementoImagen primero
+    if ("TEXTO".equalsIgnoreCase(elementoDTO.getTipo()) && anguloExistente.getElementoImagen() != null) {
+        log.info("Cambiando de ElementoImagen a ElementoTexto. Limpiando recursos de imagen...");
+        // Limpiar los recursos de Cloudinary y eliminar la entidad ElementoImagen
+        limpiarRecursosElementoImagen(anguloExistente.getElementoImagen());
+        anguloExistente.setElementoImagen(null);
     }
+    // Si teníamos un ElementoTexto y ahora queremos un ElementoImagen, eliminamos el ElementoTexto
+    else if ("IMAGEN".equalsIgnoreCase(elementoDTO.getTipo()) && anguloExistente.getElementoTexto() != null) {
+        log.info("Cambiando de ElementoTexto a ElementoImagen. Eliminando elemento texto...");
+        elementoTextoRepository.delete(anguloExistente.getElementoTexto());
+        anguloExistente.setElementoTexto(null);
+    }
+    
+    // Ahora procedemos con la actualización según el tipo
+    if ("IMAGEN".equalsIgnoreCase(elementoDTO.getTipo())) {
+        ElementoImagen elementoImagen;
+        
+        // Actualizar o crear el elemento imagen
+        if (anguloExistente.getElementoImagen() != null) {
+            elementoImagen = anguloExistente.getElementoImagen();
+        } else {
+            elementoImagen = new ElementoImagen();
+        }
+        
+        // Actualizar propiedades de diseño del elemento imagen (posición, tamaño, etc.)
+        if (elementoDTO.getPropiedadesDiseno() != null) {
+            ElementoDisenoDTO propiedadesDiseno = elementoDTO.getPropiedadesDiseno();
+            if (propiedadesDiseno.getPosicionX() != null) {
+                elementoImagen.setPosicionX(propiedadesDiseno.getPosicionX().intValue());
+            }
+            if (propiedadesDiseno.getPosicionY() != null) {
+                elementoImagen.setPosicionY(propiedadesDiseno.getPosicionY().intValue());
+            }
+            if (propiedadesDiseno.getAnchura() != null) {
+                elementoImagen.setAnchura(propiedadesDiseno.getAnchura().intValue());
+            }
+            if (propiedadesDiseno.getAltura() != null) {
+                elementoImagen.setAltura(propiedadesDiseno.getAltura().intValue());
+            }
+            if (propiedadesDiseno.getRotacion() != null) {
+                elementoImagen.setRotacion(propiedadesDiseno.getRotacion());
+            }
+        }
+        
+        // Actualizar propiedades específicas del elemento imagen (URL o imagen base64, etc.)
+        if (elementoDTO.getPropiedadesElemento() != null) {
+            Map<String, Object> propiedades = elementoDTO.getPropiedadesElemento();
+            
+            // Obtener URL o imagen base64
+            Object urlObj = propiedades.get("url");
+            String url = urlObj != null ? urlObj.toString() : null;
+            
+            if (url != null && !url.isEmpty()) {
+                CloudinaryResource cloudinaryResource;
+                
+                try {
+                    // Verificar si la URL es una imagen base64
+                    if (Base64ImageUtil.isValidBase64(url)) {
+                        log.info("Detectada imagen Base64 en actualización de elemento. Procesando...");
+                        
+                        // Si hay un recurso previo, guardamos su public_id para eliminarlo después
+                        String oldPublicId = null;
+                        CloudinaryResource oldResource = null;
+                        if (elementoImagen.getCloudinaryResource() != null) {
+                            oldResource = elementoImagen.getCloudinaryResource();
+                            oldPublicId = oldResource.getPublicId();
+                        }
+                        
+                        // Procesar imagen base64 y subirla a Cloudinary
+                        // IMPORTANTE: Esto es lo que evita que el BASE64 se guarde en la BD
+                        Map<String, Object> uploadResult = cloudinaryImageProcessor.procesarYSubirImagenBase64(url, "elementoImagen");
+                        
+                        if (uploadResult != null && !uploadResult.isEmpty()) {
+                            // Crear un nuevo recurso CloudinaryResource
+                            cloudinaryResource = new CloudinaryResource();
+                            cloudinaryResource.setUrlImagen((String) uploadResult.get("url"));
+                            cloudinaryResource.setPublicId((String) uploadResult.get("public_id"));
+                            
+                            // Guardar el recurso usando el método seguro
+                            cloudinaryResource = guardarOActualizarCloudinaryResource(cloudinaryResource);
+                            
+                            // Asignar el nuevo recurso al elemento imagen
+                            elementoImagen.setCloudinaryResource(cloudinaryResource);
+                            
+                            // Eliminar el recurso anterior de Cloudinary si existe
+                            if (oldPublicId != null) {
+                                try {
+                                    cloudinaryImageProcessor.eliminarImagen(oldPublicId);
+                                    cloudinaryResourceRepository.delete(oldResource);
+                                    log.info("Imagen anterior eliminada de Cloudinary: {}", oldPublicId);
+                                } catch (Exception e) {
+                                    log.warn("No se pudo eliminar la imagen anterior de Cloudinary: {}", oldPublicId, e);
+                                }
+                            }
+                        } else {
+                            throw new ImageProcessingException("Error al procesar imagen base64: resultado de carga nulo o vacío");
+                        }
+                    } else {
+                        // Es una URL normal, actualizar normalmente
+                        // Si ya existe un recurso, actualizamos sus propiedades
+                        if (elementoImagen.getCloudinaryResource() != null) {
+                            cloudinaryResource = elementoImagen.getCloudinaryResource();
+                            
+                            // Guardar la URL anterior para verificar si hubo cambio
+                            String oldUrl = cloudinaryResource.getUrlImagen();
+                            
+                            cloudinaryResource.setUrlImagen(url);
+                            
+                            // Extraer publicId y verificar que no sea nulo
+                            String publicId = extraerPublicIdDeUrl(url);
+                            if (publicId == null || publicId.trim().isEmpty()) {
+                                // Si es nulo, mantener el publicId anterior o generar uno nuevo
+                                if (cloudinaryResource.getPublicId() == null || cloudinaryResource.getPublicId().trim().isEmpty()) {
+                                    publicId = "generated_" + System.currentTimeMillis();
+                                    log.warn("Se generó un publicId ({}) porque no se pudo extraer de la URL", publicId);
+                                } else {
+                                    publicId = cloudinaryResource.getPublicId();
+                                    log.info("Se mantuvo el publicId existente: {}", publicId);
+                                }
+                            }
+                            cloudinaryResource.setPublicId(publicId);
+                            
+                            // Actualizar el recurso en la BD usando el método seguro
+                            cloudinaryResource = guardarOActualizarCloudinaryResource(cloudinaryResource);
+                            
+                            // Si la URL cambió, intentar eliminar la imagen anterior de Cloudinary
+                            if (!url.equals(oldUrl)) {
+                                String oldPublicId = extraerPublicIdDeUrl(oldUrl);
+                                if (oldPublicId != null && !oldPublicId.isEmpty()) {
+                                    try {
+                                        cloudinaryImageProcessor.eliminarImagen(oldPublicId);
+                                        log.info("Imagen anterior eliminada de Cloudinary por cambio de URL: {}", oldPublicId);
+                                    } catch (Exception e) {
+                                        log.warn("No se pudo eliminar la imagen anterior de Cloudinary: {}", oldPublicId, e);
+                                    }
+                                }
+                            }
+                        } else {
+                            // Crear un nuevo recurso
+                            cloudinaryResource = new CloudinaryResource();
+                            cloudinaryResource.setUrlImagen(url);
+                            
+                            // Extraer publicId y verificar que no sea nulo
+                            String publicId = extraerPublicIdDeUrl(url);
+                            if (publicId == null || publicId.trim().isEmpty()) {
+                                // Generar un publicId único basado en timestamp
+                                publicId = "generated_" + System.currentTimeMillis();
+                                log.warn("Se generó un publicId ({}) porque no se pudo extraer de la URL", publicId);
+                            }
+                            cloudinaryResource.setPublicId(publicId);
+                            
+                            // Guardar usando el método seguro
+                            cloudinaryResource = guardarOActualizarCloudinaryResource(cloudinaryResource);
+                        }
+                        elementoImagen.setCloudinaryResource(cloudinaryResource);
+                    }
+                } catch (ImageProcessingException e) {
+                    log.error("Error al procesar imagen: {}", e.getMessage(), e);
+                    throw e;
+                } catch (Exception e) {
+                    log.error("Error al actualizar recurso en Cloudinary: {}", e.getMessage(), e);
+                    throw new DisenoProcesamientoException("Error al actualizar imagen en Cloudinary", e);
+                }
+            }
+        }
+        
+        // Guardar el elemento imagen
+        elementoImagen = elementoImagenRepository.save(elementoImagen);
+        anguloExistente.setElementoImagen(elementoImagen);
+        
+    } else if ("TEXTO".equalsIgnoreCase(elementoDTO.getTipo())) {
+        ElementoTexto elementoTexto;
+        
+        // Actualizar o crear el elemento texto
+        if (anguloExistente.getElementoTexto() != null) {
+            elementoTexto = anguloExistente.getElementoTexto();
+        } else {
+            elementoTexto = new ElementoTexto();
+        }
+        
+        // Actualizar propiedades de diseño del elemento texto (posición, tamaño, etc.)
+        if (elementoDTO.getPropiedadesDiseno() != null) {
+            ElementoDisenoDTO propiedadesDiseno = elementoDTO.getPropiedadesDiseno();
+            
+            if (propiedadesDiseno.getPosicionX() != null) {
+                elementoTexto.setPosicionX(propiedadesDiseno.getPosicionX().intValue());
+            }
+            if (propiedadesDiseno.getPosicionY() != null) {
+                elementoTexto.setPosicionY(propiedadesDiseno.getPosicionY().intValue());
+            }
+        }
+        
+        // Actualizar propiedades específicas del elemento texto (contenido, fuente, color, etc.)
+        if (elementoDTO.getPropiedadesElemento() != null) {
+            Map<String, Object> propiedades = elementoDTO.getPropiedadesElemento();
+            
+            // Actualizar contenido del texto
+            Object contenidoObj = propiedades.get("contenido");
+            if (contenidoObj != null) {
+                elementoTexto.setContenido(contenidoObj.toString());
+            }
+            
+            // Manejar la fuente - ElementoTexto tiene un objeto Fuente, no un String
+            Object fuenteObj = propiedades.get("fuente");
+            if (fuenteObj != null) {
+                // Buscar la fuente por ID en lugar de crear una nueva
+                Long fuenteId = 1L; // ID por defecto
+                if (fuenteObj instanceof Number) {
+                    fuenteId = ((Number) fuenteObj).longValue();
+                } else if (fuenteObj instanceof String) {
+                    try {
+                        fuenteId = Long.parseLong((String) fuenteObj);
+                    } catch (NumberFormatException e) {
+                        log.warn("No se pudo convertir la fuente '{}' a Long, usando valor por defecto", fuenteObj);
+                    }
+                }
+                
+                // Buscar fuente existente usando el repositorio para evitar problemas de entidad transitoria
+                Fuente fuente = fuenteRepository.findById(fuenteId)
+                    .orElseGet(() -> {
+                        // Si no encontramos la fuente, usar la fuente por defecto
+                        return fuenteRepository.findAll().stream().findFirst()
+                            .orElseThrow(() -> new IllegalStateException("No hay fuentes configuradas en el sistema"));
+                    });
+                elementoTexto.setFuente(fuente);
+            }
+            
+            // Manejar el color - ElementoTexto tiene un objeto Color, no un String
+            Object colorObj = propiedades.get("color");
+            if (colorObj != null) {
+                // Buscar el color por ID en lugar de crear uno nuevo
+                String colorId = "1"; // ID por defecto
+                if (colorObj instanceof String) {
+                    colorId = (String) colorObj;
+                }
+                // Buscar color existente usando el repositorio para evitar problemas de entidad transitoria
+                Color color = colorRepository.findById(colorId)
+                    .orElseGet(() -> {
+                        // Si no encontramos el color, usar el color por defecto
+                        return colorRepository.findAll().stream().findFirst()
+                            .orElseThrow(() -> new IllegalStateException("No hay colores configurados en el sistema"));
+                    });
+                elementoTexto.setColorTexto(color);
+            }
+            
+            // ElementoTexto usa 'tamanoFuente' en lugar de 'tamanoTexto'
+            Object tamanoObj = propiedades.get("tamanoTexto");
+            if (tamanoObj instanceof Number) {
+                elementoTexto.setTamanoFuente(((Number) tamanoObj).intValue());
+            }
+        }
+        
+        // Guardar el elemento texto
+        elementoTexto = elementoTextoRepository.save(elementoTexto);
+        anguloExistente.setElementoTexto(elementoTexto);
+    }
+}
+
+
     private void eliminarAngulosNoPresentes(Collection<AnguloDiseno> angulosAEliminar) {
         for (AnguloDiseno anguloAEliminar : angulosAEliminar) {
             limpiarRecursosAngulo(anguloAEliminar);
@@ -469,6 +642,101 @@ public class ProductoPersonalizadoServiceImpl implements ProductoPersonalizadoSe
         } catch (Exception e) {
             log.error("Error al actualizar diseño personalizado: {}", e.getMessage(), e);
             throw new RuntimeException("Error al actualizar diseño personalizado: " + e.getMessage(), e);
+        }
+    }
+    
+    @PersistenceContext
+    private EntityManager entityManager;
+    
+    /**
+     * Método auxiliar para guardar o actualizar CloudinaryResource de manera segura
+     * Evita el error ORA-01461 usando SQL nativo con EntityManager y control total de la sentencia
+     * @param resource El recurso a guardar o actualizar
+     * @return El recurso guardado o actualizado
+     */
+    private CloudinaryResource guardarOActualizarCloudinaryResource(CloudinaryResource resource) {
+        if (resource == null) return null;
+        
+        try {
+            if (resource.getId() == null) {
+                // Si es un nuevo recurso, crear mediante SQL nativo para evitar problemas con datos largos
+                String sql = "INSERT INTO cloudinary_resources (public_id, url_imagen) VALUES (?, ?)";
+                
+                // Usamos PreparedStatement directamente a través de EntityManager's Connection
+                // para mantener el control total sobre cómo se vinculan los parámetros
+                jakarta.persistence.Query query = entityManager.createNativeQuery(sql);
+                query.setParameter(1, resource.getPublicId());
+                query.setParameter(2, resource.getUrlImagen());
+                query.executeUpdate();
+                
+                // Obtener el ID generado mediante una consulta SELECT MAX(id)
+                BigDecimal newId = (BigDecimal) entityManager.createNativeQuery("SELECT MAX(id) FROM cloudinary_resources").getSingleResult();
+                
+                // Crear un nuevo objeto con los datos guardados
+                CloudinaryResource freshResource = new CloudinaryResource();
+                freshResource.setId(newId.longValue());
+                freshResource.setPublicId(resource.getPublicId());
+                freshResource.setUrlImagen(resource.getUrlImagen());
+                
+                return freshResource;
+            } else {
+                // Para recursos existentes, utilizamos actualizaciones parciales y verificamos longitud
+                Long resourceId = resource.getId();
+                String publicId = resource.getPublicId();
+                String urlImagen = resource.getUrlImagen();
+                
+                // Desacoplar la entidad del contexto de persistencia para evitar sincronización automática
+                entityManager.detach(resource);
+                
+                // Actualizar public_id con JDBC PreparedStatement para controlar el tipo de dato
+                if (publicId != null) {
+                    // Verificamos si el valor es muy largo (probablemente una imagen codificada en Base64)
+                    if (publicId.length() > 255) {
+                        log.warn("public_id demasiado largo ({}), truncando a 255 caracteres", publicId.length());
+                        publicId = publicId.substring(0, 255); // Truncar a 255 caracteres
+                    }
+                    
+                    // Usamos consulta preparada para actualizaciones parciales
+                    jakarta.persistence.Query updatePublicId = entityManager.createNativeQuery(
+                            "UPDATE cloudinary_resources SET public_id = ? WHERE id = ?");
+                    updatePublicId.setParameter(1, publicId);
+                    updatePublicId.setParameter(2, resourceId);
+                    updatePublicId.executeUpdate();
+                    
+                    log.debug("public_id actualizado para id={}, longitud={}", resourceId, publicId.length());
+                }
+                
+                // Actualizar url_imagen con JDBC PreparedStatement para controlar el tipo de dato
+                if (urlImagen != null) {
+                    // Verificamos si el valor es muy largo
+                    if (urlImagen.length() > 255) {
+                        log.warn("url_imagen demasiado largo ({}), truncando a 255 caracteres", urlImagen.length());
+                        urlImagen = urlImagen.substring(0, 255); // Truncar a 255 caracteres
+                    }
+                    
+                    // Usamos consulta preparada para actualizaciones parciales
+                    jakarta.persistence.Query updateUrlImagen = entityManager.createNativeQuery(
+                            "UPDATE cloudinary_resources SET url_imagen = ? WHERE id = ?");
+                    updateUrlImagen.setParameter(1, urlImagen);
+                    updateUrlImagen.setParameter(2, resourceId);
+                    updateUrlImagen.executeUpdate();
+                    
+                    log.debug("url_imagen actualizado para id={}, longitud={}", resourceId, urlImagen.length());
+                }
+                
+                // Limpiar completamente el contexto de persistencia
+                entityManager.clear();
+                
+                // Recargar la entidad fresca desde la base de datos
+                CloudinaryResource freshResource = entityManager.find(CloudinaryResource.class, resourceId);
+                if (freshResource == null) {
+                    return resource; // Fallback si no se encuentra
+                }
+                return freshResource;
+            }
+        } catch (Exception e) {
+            log.error("Error al guardar/actualizar CloudinaryResource: {}", e.getMessage(), e);
+            throw new RuntimeException("Error al guardar/actualizar CloudinaryResource", e);
         }
     }
     
