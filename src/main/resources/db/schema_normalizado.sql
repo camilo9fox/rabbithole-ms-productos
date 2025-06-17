@@ -338,7 +338,10 @@ INSERT INTO tipos_angulo (codigo, nombre) VALUES ('right', 'Derecha');
 INSERT INTO tipos_item (codigo, nombre) VALUES ('PRODUCT', 'Producto de Catálogo');
 INSERT INTO tipos_item (codigo, nombre) VALUES ('CUSTOM', 'Diseño Personalizado');
 
-
 INSERT INTO usuarios (email, nombre, apellido, oid, telefono, direccion, ciudad, estado, pais, codigo_postal) VALUES ('test@test.cl', 'test', 'test', 'OIDTEST', '999999999', 'Direccion test', 'Ciudad test', 'Estado test', 'Pais test', 'Codigo postal test');
+
+INSERT INTO categorias (nombre, descripcion) VALUES ('Anime', 'Diseño de anime');
+INSERT INTO categorias (nombre, descripcion) VALUES ('Caricaturas', 'Diseño de caricaturas');
+INSERT INTO categorias (nombre, descripcion) VALUES ('Minimalista', 'Minimalista');
 
 COMMIT;

@@ -1,5 +1,6 @@
 package com.rabbithole.productos.model;
 
+import com.fasterxml.jackson.annotation.JsonManagedReference;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
@@ -74,6 +75,7 @@ public class DisenoPersonalizado implements Serializable {
     
     // Nota: Los campos publico y activo se eliminaron porque no existen en el esquema de la base de datos
     
+    @JsonManagedReference
     @OneToMany(mappedBy = "disenoPersonalizado", cascade = CascadeType.ALL, orphanRemoval = true)
     private Set<AnguloDiseno> angulos = new HashSet<>();
     

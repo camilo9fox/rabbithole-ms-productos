@@ -1,5 +1,6 @@
 package com.rabbithole.productos.model;
 
+import com.fasterxml.jackson.annotation.JsonBackReference;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.NotNull;
 import lombok.Getter;
@@ -29,6 +30,7 @@ public class AnguloDiseno implements Serializable {
     @JoinColumn(name = "TIPO_ANGULO_ID", nullable = false)
     private TipoAngulo tipoAngulo;
     
+    @JsonBackReference
     @NotNull
     @ManyToOne
     @JoinColumn(name = "DISENO_PERSONALIZADO_ID", nullable = false)
