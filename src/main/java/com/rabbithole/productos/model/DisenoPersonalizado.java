@@ -30,8 +30,9 @@ public class DisenoPersonalizado implements Serializable {
     @Column(name = "USUARIO_ID")
     private Long usuarioId;
     
-    @Column(name = "NOMBRE", length = 255)
-    private String nombre = "Polera Personalizada";
+    @Lob
+    @Column(name = "DETALLE")
+    private String detalle = "Polera Personalizada";
     
     @NotNull
     @ManyToOne

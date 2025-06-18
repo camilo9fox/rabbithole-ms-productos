@@ -4,7 +4,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
+
 
 import org.springframework.stereotype.Component;
 
@@ -36,7 +36,7 @@ public class DisenoPersonalizadoMapper {
         
         DisenoPersonalizadoDTO dto = new DisenoPersonalizadoDTO();
         dto.setId(disenoPersonalizado.getId());
-        dto.setNombre(disenoPersonalizado.getNombre());
+        dto.setDetalle(disenoPersonalizado.getDetalle());
         dto.setUsuarioId(disenoPersonalizado.getUsuarioId());
 
         dto.setColorId(disenoPersonalizado.getColor() != null ? disenoPersonalizado.getColor().getId() : null);
@@ -53,7 +53,7 @@ public class DisenoPersonalizadoMapper {
         if (angulos != null) {
             dto.setAngulos(angulos.stream()
                 .map(this::anguloToDTO)
-                .collect(Collectors.toList()));
+                .toList());
         }
         
         return dto;

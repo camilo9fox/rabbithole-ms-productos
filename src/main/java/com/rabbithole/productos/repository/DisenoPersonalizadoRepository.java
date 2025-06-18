@@ -25,17 +25,7 @@ public interface DisenoPersonalizadoRepository extends JpaRepository<DisenoPerso
      */
     Page<DisenoPersonalizado> findByUsuarioId(Long usuarioId, Pageable pageable);
     
-    /**
-     * NOTA: Este método se comentó porque el campo 'activo' no existe en el esquema de la base de datos
-     * Se recomienda usar findByUsuarioId o implementar una consulta JPQL personalizada con otros criterios
-     */
-    // Page<DisenoPersonalizado> findByUsuarioIdAndActivo(Long usuarioId, boolean activo, Pageable pageable);
-    
-    /**
-     * NOTA: Este método se comentó porque el campo 'publico' no existe en el esquema de la base de datos
-     * Se recomienda implementar una consulta JPQL personalizada con otros criterios si se necesita esta funcionalidad
-     */
-    // Page<DisenoPersonalizado> findByPublico(boolean publico, Pageable pageable);
+
     
     /**
      * Encuentra diseños por estado de aprobación.
@@ -55,12 +45,14 @@ public interface DisenoPersonalizadoRepository extends JpaRepository<DisenoPerso
     long countByUsuarioId(Long usuarioId);
     
     /**
-     * Encuentra diseños por nombre conteniendo el texto de búsqueda.
+     * Encuentra diseños por detalle conteniendo el texto de búsqueda.
+     * Utiliza LIKE case-insensitive nativo que es compatible con campos CLOB.
      *
      * @param texto Texto de búsqueda
      * @param pageable Información de paginación
      * @return Página de diseños que coinciden con la búsqueda
      */
-    @Query("SELECT d FROM DisenoPersonalizado d WHERE UPPER(d.nombre) LIKE UPPER(CONCAT('%', :texto, '%'))")
+    @Query(value = "SELECT * FROM DISENOS_PERSONALIZADOS d WHERE LOWER(d.DETALLE) LIKE LOWER(CONCAT('%', :texto, '%'))", 
+           nativeQuery = true)
     Page<DisenoPersonalizado> buscarPorTexto(@Param("texto") String texto, Pageable pageable);
 }

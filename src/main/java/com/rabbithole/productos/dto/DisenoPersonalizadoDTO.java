@@ -13,7 +13,7 @@ import java.util.List;
 public class DisenoPersonalizadoDTO {
     private Long id;
     private Long usuarioId;
-    private String nombre;
+    private String detalle;
     private String colorId; // Cambio a String para coincidir con el tipo de ID en Color
     private String tallaId; // Cambio a String para coincidir con el tipo de ID en Talla
     private BigDecimal precio;

@@ -8,6 +8,7 @@ import com.rabbithole.productos.mapper.DisenoPersonalizadoMapper;
 import com.rabbithole.productos.model.*;
 import com.rabbithole.productos.repository.*;
 import com.rabbithole.productos.exception.DisenoProcesamientoException;
+import com.rabbithole.productos.exception.ImageProcessingException;
 import com.rabbithole.productos.service.CloudinaryResourceService;
 import com.rabbithole.productos.service.ProductoPersonalizadoService;
 import com.rabbithole.productos.util.Base64ImageUtil;
@@ -16,12 +17,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.multipart.MultipartFile;
 
-import com.cloudinary.utils.ObjectUtils;
-
-// Importaciones sin cambios
-import com.rabbithole.productos.exception.ImageProcessingException;
 import java.math.BigDecimal;
 import java.util.*;
 import java.util.regex.Matcher;
@@ -64,7 +60,7 @@ public class ProductoPersonalizadoServiceImpl implements ProductoPersonalizadoSe
             // 1. Crear el diseño personalizado principal
             DisenoPersonalizado diseno = new DisenoPersonalizado();
             diseno.setUsuarioId(disenoDTO.getUsuarioId());
-            diseno.setNombre(disenoDTO.getNombre() != null ? disenoDTO.getNombre() : "Polera Personalizada");
+            diseno.setDetalle(disenoDTO.getDetalle() != null ? disenoDTO.getDetalle() : "Polera Personalizada");
             diseno.setColor(colorRepository.findById(disenoDTO.getColorId())
                     .orElseThrow(() -> new RuntimeException("Color no encontrado")));
             diseno.setTalla(tallaRepository.findById(disenoDTO.getTallaId())
@@ -74,7 +70,7 @@ public class ProductoPersonalizadoServiceImpl implements ProductoPersonalizadoSe
                     .orElseThrow(() -> new RuntimeException("Estado no encontrado")));
             diseno.setMotivoRechazo(disenoDTO.getMotivoRechazo());
             diseno.setNotasModificacion(disenoDTO.getNotasModificacion());
-            diseno.setCreadoPorAdmin(disenoDTO.getCreadoPorAdmin() != null ? disenoDTO.getCreadoPorAdmin() : false);
+            diseno.setCreadoPorAdmin(disenoDTO.getCreadoPorAdmin() != null && disenoDTO.getCreadoPorAdmin());
             
             // Guardar el diseño para obtener su ID
             DisenoPersonalizado disenoGuardado = disenoPersonalizadoRepository.save(diseno);
@@ -134,8 +130,8 @@ public class ProductoPersonalizadoServiceImpl implements ProductoPersonalizadoSe
      * @return La entidad actualizada
      */
     private DisenoPersonalizado actualizarCamposBasicos(DisenoPersonalizado existente, DisenoPersonalizadoDTO dto) {
-        // Actualizar nombre
-        existente.setNombre(dto.getNombre() != null ? dto.getNombre() : existente.getNombre());
+        // Actualizar detalle
+        existente.setDetalle(dto.getDetalle() != null ? dto.getDetalle() : existente.getDetalle());
         
         // Actualizar color si se proporciona
         if (dto.getColorId() != null) {
@@ -752,22 +748,6 @@ private void actualizarElemento(ElementoDTO elementoDTO, AnguloDiseno anguloExis
             log.info("{} de Cloudinary eliminado correctamente, ID: {}", resourceType, resource.getId());
         } catch (Exception e) {
             log.warn("No se pudo eliminar el {} de Cloudinary: {}", resourceType, resource.getId(), e);
-        }
-    }
-    
-    /**
-     * Elimina la imagen de Cloudinary por publicId de forma segura
-     * (método usado para compatibilidad con elementos antiguos)
-     * @param publicId ID público de la imagen en Cloudinary
-     */
-    private void eliminarImagenPorPublicIdSeguro(String publicId) {
-        if (publicId == null || publicId.isEmpty()) return;
-        try {
-            cloudinaryImageProcessor.eliminarImagen(publicId);
-            log.info("Imagen eliminada de Cloudinary por publicId: {}", publicId);
-        } catch (Exception e) {
-            // Convertimos cualquier excepción a runtime para mantener la firma del método
-            log.warn("No se pudo eliminar la imagen de Cloudinary: {}", publicId, e);
         }
     }
     
