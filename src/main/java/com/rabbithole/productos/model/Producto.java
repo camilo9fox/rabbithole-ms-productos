@@ -1,5 +1,6 @@
 package com.rabbithole.productos.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -19,6 +20,7 @@ import java.time.LocalDateTime;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
+@JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
 public class Producto {
 
     @Id
@@ -26,8 +28,9 @@ public class Producto {
     @Column(name = "ID")
     private Long id;
     
-    @ManyToOne(fetch = FetchType.LAZY)
+    @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "DISENO_PERSONALIZADO_ID")
+    @JsonIgnoreProperties({"hibernateLazyInitializer", "handler", "angulos"})
     private DisenoPersonalizado disenoPersonalizado;
 
     @NotBlank(message = "El nombre del producto es obligatorio")
@@ -39,8 +42,9 @@ public class Producto {
     @Column(name = "DESCRIPCION")
     private String descripcion;
 
-    @ManyToOne(fetch = FetchType.LAZY)
+    @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "CATEGORIA_ID", nullable = false)
+    @JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
     private Categoria categoria;
 
     @Column(name = "ACTIVO", nullable = false)

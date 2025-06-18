@@ -1,5 +1,6 @@
 package com.rabbithole.productos.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonManagedReference;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.NotNull;
@@ -20,6 +21,7 @@ import java.util.Set;
 @NoArgsConstructor
 @Entity
 @Table(name = "DISENOS_PERSONALIZADOS")
+@JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
 public class DisenoPersonalizado implements Serializable {
 
     @Id
@@ -35,13 +37,15 @@ public class DisenoPersonalizado implements Serializable {
     private String detalle = "Polera Personalizada";
     
     @NotNull
-    @ManyToOne
+    @ManyToOne(fetch = FetchType.EAGER) // Cambiado a EAGER para evitar problemas de serialización
     @JoinColumn(name = "COLOR_ID", nullable = false)
+    @JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
     private Color color; // Color ya implementa Serializable
     
     @NotNull
-    @ManyToOne
+    @ManyToOne(fetch = FetchType.EAGER) // Cambiado a EAGER para evitar problemas de serialización
     @JoinColumn(name = "TALLA_ID", nullable = false)
+    @JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
     private Talla talla; // Talla ya implementa Serializable
     
     @NotNull
@@ -50,8 +54,9 @@ public class DisenoPersonalizado implements Serializable {
     private BigDecimal precio;
     
     @NotNull
-    @ManyToOne
+    @ManyToOne(fetch = FetchType.EAGER) // Cambiado a EAGER para evitar problemas de serialización
     @JoinColumn(name = "ESTADO_ID", nullable = false)
+    @JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
     private EstadoDiseno estado; // EstadoDiseno ya implementa Serializable
     
     @Lob
