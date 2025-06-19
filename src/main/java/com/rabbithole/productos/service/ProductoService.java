@@ -159,6 +159,19 @@ public class ProductoService {
     }
     
     /**
+     * Guarda un producto existente sin validaciones adicionales.
+     * Útil para actualizaciones simples como cambiar el estado activo.
+     *
+     * @param producto Producto a guardar
+     * @return Producto guardado
+     */
+    public Producto saveProducto(Producto producto) {
+        log.debug("Guardando producto con ID: {}", producto.getId());
+        producto.setActualizadoEn(LocalDateTime.now());
+        return productoRepository.save(producto);
+    }
+    
+    /**
      * Resuelve las relaciones con otras entidades (categorÃ­a y diseÃ±o personalizado)
      * al crear un producto.
      *
