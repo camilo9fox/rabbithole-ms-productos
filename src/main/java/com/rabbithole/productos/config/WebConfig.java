@@ -17,25 +17,24 @@ public class WebConfig implements WebMvcConfigurer {
     @Override
     public void addCorsMappings(CorsRegistry registry) {
         registry.addMapping("/**")
-            .allowedOrigins("http://localhost:3000")
-            .allowedMethods("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS")
-            .allowedHeaders("*")
-            .exposedHeaders("Access-Control-Allow-Origin", "Access-Control-Allow-Credentials")
-            .allowCredentials(true)
-            .maxAge(3600);
+                .allowedOrigins("http://localhost:3000")
+                .allowedMethods("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS")
+                .allowedHeaders("*")
+                .exposedHeaders("Access-Control-Allow-Origin", "Access-Control-Allow-Credentials")
+                .maxAge(3600);
     }
-    
+
     @Bean
     public MappingJackson2HttpMessageConverter jacksonMessageConverter() {
         MappingJackson2HttpMessageConverter messageConverter = new MappingJackson2HttpMessageConverter();
         ObjectMapper mapper = new ObjectMapper();
-        
+
         // Desactivar el fallo en beans vacíos (como los proxies de Hibernate)
         mapper.disable(SerializationFeature.FAIL_ON_EMPTY_BEANS);
-        
+
         // No incluir propiedades nulas
         mapper.setSerializationInclusion(JsonInclude.Include.NON_NULL);
-        
+
         messageConverter.setObjectMapper(mapper);
         return messageConverter;
     }
