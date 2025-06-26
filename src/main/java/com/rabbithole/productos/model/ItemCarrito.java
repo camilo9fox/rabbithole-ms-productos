@@ -9,6 +9,7 @@ import lombok.AllArgsConstructor;
 import java.io.Serializable;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
 
 /**
  * Entidad que representa un ítem del carrito de compras en la base de datos.
@@ -128,6 +129,12 @@ public class ItemCarrito implements Serializable {
      */
     @Column(name = "tipo_item_id", insertable = false, updatable = false)
     private Long tipoItemId;
+    
+    /**
+     * Lista de thumbnails asociados a este ítem del carrito.
+     */
+    @OneToMany(mappedBy = "itemCarrito", fetch = FetchType.LAZY)
+    private List<ThumbnailItem> thumbnails;
 
     /**
      * Fecha de creación del ítem.

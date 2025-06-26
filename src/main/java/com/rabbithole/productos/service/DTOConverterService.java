@@ -299,22 +299,25 @@ public class DTOConverterService {
         }
 
         ItemCarritoDTO dto = new ItemCarritoDTO();
+        
         dto.setId(item.getId());
-        dto.setCarritoId(item.getCarrito() != null ? item.getCarrito().getId() : null);
-
+        if (item.getCarrito() != null) {
+            dto.setCarritoId(item.getCarrito().getId());
+        }
+        
         // Información del producto
         if (item.getProducto() != null) {
             dto.setProductoId(item.getProducto().getId());
             dto.setProductoNombre(item.getProducto().getNombre());
             dto.setProducto(convertToProductoDTO(item.getProducto()));
         }
-
+        
         // Información del diseño personalizado
         if (item.getDisenoPersonalizado() != null) {
             dto.setDisenoPersonalizadoId(item.getDisenoPersonalizado().getId());
             dto.setDisenoPersonalizado(convertToDisenoDTO(item.getDisenoPersonalizado()));
         }
-
+        
         // Información del color
         if (item.getColor() != null) {
             ColorDTO colorDTO = new ColorDTO();
@@ -342,10 +345,18 @@ public class DTOConverterService {
         // Fechas
         dto.setFechaCreacion(item.getFechaCreacion());
         dto.setUltimaActualizacion(item.getUltimaActualizacion());
+        
+        // Convertir thumbnails si existen
+        if (item.getThumbnails() != null && !item.getThumbnails().isEmpty()) {
+            List<ThumbnailItemDTO> thumbnailDTOs = item.getThumbnails().stream()
+                    .map(this::convertToThumbnailItemDTO)
+                    .toList();
+            dto.setThumbnails(thumbnailDTOs);
+        }
 
         return dto;
     }
-
+    
     /**
      * Convierte un ItemOrden a ItemOrdenDTO con información completa
      */
@@ -389,10 +400,10 @@ public class DTOConverterService {
         }
         
         // Convertir thumbnails si existen
-        if (itemOrden.getThumbnail() != null && !itemOrden.getThumbnail().isEmpty()) {
-            List<ThumbnailItemDTO> thumbnailDTOs = itemOrden.getThumbnail().stream()
+        if (itemOrden.getThumbnails() != null && !itemOrden.getThumbnails().isEmpty()) {
+            List<ThumbnailItemDTO> thumbnailDTOs = itemOrden.getThumbnails().stream()
                     .map(this::convertToThumbnailItemDTO)
-                    .collect(java.util.stream.Collectors.toList());
+                    .toList();
             dto.setThumbnails(thumbnailDTOs);
         }
         

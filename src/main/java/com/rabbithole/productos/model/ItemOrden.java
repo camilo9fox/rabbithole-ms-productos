@@ -148,8 +148,8 @@ public class ItemOrden implements Serializable {
      * Lista de miniaturas del ítem (usualmente para diseños personalizados o
      * variantes).
      */
-    @OneToMany(mappedBy = "itemOrden", cascade = CascadeType.ALL, orphanRemoval = true)
-    private List<ThumbnailItem> thumbnail = new ArrayList<>();
+    @OneToMany(mappedBy = "itemOrden", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
+    private List<ThumbnailItem> thumbnails = new ArrayList<>();
 
     /**
      * Calcula el precio total del ítem (cantidad * precio unitario).
