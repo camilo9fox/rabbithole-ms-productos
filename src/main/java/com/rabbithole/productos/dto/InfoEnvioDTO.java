@@ -18,6 +18,22 @@ public class InfoEnvioDTO {
     private String nombreCompleto;
     
     /**
+     * Nombre para compatibilidad con el cliente
+     * @return el valor de nombreCompleto
+     */
+    public String getNombre() {
+        return nombreCompleto;
+    }
+
+    /**
+     * Establece el nombre (alias de setNombreCompleto)
+     * @param nombre el nombre a establecer
+     */
+    public void setNombre(String nombre) {
+        this.nombreCompleto = nombre;
+    }
+    
+    /**
      * Dirección completa de entrega
      */
     private String direccion;
