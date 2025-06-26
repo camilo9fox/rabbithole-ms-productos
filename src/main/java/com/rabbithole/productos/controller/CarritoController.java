@@ -84,7 +84,7 @@ public class CarritoController {
         Long productoId = Long.valueOf(requestBody.get("productoId").toString());
         String colorId = requestBody.get("colorId").toString();
         String tallaId = requestBody.get("tallaId").toString();
-        String tipoItemId = requestBody.get("tipoItemId").toString();
+        Long tipoItemId = Long.valueOf(requestBody.get("tipoItemId").toString());
         Integer cantidad = requestBody.containsKey("cantidad") ? 
             Integer.valueOf(requestBody.get("cantidad").toString()) : 1;
             
@@ -110,7 +110,7 @@ public class CarritoController {
         Long disenoId = Long.valueOf(requestBody.get("disenoId").toString());
         String colorId = requestBody.get("colorId").toString();
         String tallaId = requestBody.get("tallaId").toString();
-        String tipoItemId = requestBody.get("tipoItemId").toString();
+        Long tipoItemId = Long.valueOf(requestBody.get("tipoItemId").toString());
         BigDecimal precio = requestBody.containsKey("precio") ?
                 new BigDecimal(requestBody.get("precio").toString()) : BigDecimal.ZERO;
         Integer cantidad = requestBody.containsKey("cantidad") ? 

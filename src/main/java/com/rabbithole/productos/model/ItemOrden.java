@@ -78,6 +78,10 @@ public class ItemOrden implements Serializable {
      * Tipo de ítem.
      * La relación es Many-to-One (muchos ítems pueden ser del mismo tipo).
      */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "tipo_item_id", nullable = false)
+    @JsonBackReference
+    private TipoItem tipoItem;
 
     /**
      * ID del tipo de ítem, para mantener referencia explícita que se mapea a la

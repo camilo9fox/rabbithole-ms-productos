@@ -82,6 +82,22 @@ public class Orden implements Serializable {
     @OneToMany(mappedBy = "orden", cascade = CascadeType.ALL, orphanRemoval = true)
     @JsonManagedReference
     private List<HistorialEstadosOrden> historialEstados = new ArrayList<>();
+    
+    /**
+     * Información de envío asociada a esta orden.
+     * Relación One-to-One con InfoEnvio.
+     */
+    @OneToOne(mappedBy = "orden", cascade = CascadeType.ALL, orphanRemoval = true)
+    @JsonManagedReference
+    private InfoEnvio infoEnvio;
+    
+    /**
+     * Información de pago asociada a esta orden.
+     * Relación One-to-One con InfoPago.
+     */
+    @OneToOne(mappedBy = "orden", cascade = CascadeType.ALL, orphanRemoval = true)
+    @JsonManagedReference
+    private InfoPago infoPago;
 
     /**
      * Método callback que se ejecuta antes de la inserción de un nuevo registro.

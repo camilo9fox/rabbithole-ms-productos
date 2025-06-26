@@ -8,6 +8,6 @@ import org.springframework.stereotype.Repository;
  * Repositorio para la entidad TipoItem
  */
 @Repository
-public interface TipoItemRepository extends JpaRepository<TipoItem, String> {
+public interface TipoItemRepository extends JpaRepository<TipoItem, Long> {
     // Métodos personalizados pueden ser agregados aquí
 }

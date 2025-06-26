@@ -100,9 +100,7 @@ public class CarritoService {
      */
     @Transactional
     public Carrito agregarProductoAlCarrito(Long carritoId, Long productoId, String colorId, String tallaId, 
-                                           String tipoItemId, Integer cantidad) {
-        // Convertimos tipoItemId a Long para coincidir con el tipo en la entidad ItemCarrito
-        Long tipoItemIdLong = Long.valueOf(tipoItemId);
+                                           Long tipoItemId, Integer cantidad) {
         // Obtener entidades
         Carrito carrito = obtenerCarritoPorId(carritoId);
         Producto producto = productoRepository.findById(productoId)
@@ -120,7 +118,7 @@ public class CarritoService {
                 .filter(item -> item.getProducto() != null && item.getProducto().getId().equals(productoId)
                        && item.getColorId().equals(colorId) 
                        && item.getTallaId().equals(tallaId)
-                       && item.getTipoItemId().equals(tipoItemIdLong))
+                       && item.getTipoItemId().equals(tipoItemId))
                 .findFirst();
         
         if (itemExistente.isPresent()) {
@@ -162,9 +160,7 @@ public class CarritoService {
      */
     @Transactional
     public Carrito agregarDisenoPersonalizadoAlCarrito(Long carritoId, Long disenoPersonalizadoId, 
-            String colorId, String tallaId, String tipoItemId, Integer cantidad, BigDecimal precioUnitario) {
-        // Convertimos tipoItemId a Long para coincidir con el tipo en la entidad ItemCarrito
-        Long tipoItemIdLong = Long.valueOf(tipoItemId);
+            String colorId, String tallaId, Long tipoItemId, Integer cantidad, BigDecimal precioUnitario) {
         // Obtener entidades
         Carrito carrito = obtenerCarritoPorId(carritoId);
         DisenoPersonalizado diseno = disenoPersonalizadoRepository.findById(disenoPersonalizadoId)
@@ -183,7 +179,7 @@ public class CarritoService {
                        && item.getDisenoPersonalizado().getId().equals(disenoPersonalizadoId)
                        && item.getColorId().equals(colorId) 
                        && item.getTallaId().equals(tallaId)
-                       && item.getTipoItemId().equals(tipoItemIdLong))
+                       && item.getTipoItemId().equals(tipoItemId))
                 .findFirst();
         
         if (itemExistente.isPresent()) {

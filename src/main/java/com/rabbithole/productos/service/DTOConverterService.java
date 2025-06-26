@@ -9,7 +9,6 @@ import org.springframework.stereotype.Service;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 /**
  * Servicio para convertir entidades a DTOs
@@ -284,7 +283,7 @@ public class DTOConverterService {
         if (carrito.getItems() != null && !carrito.getItems().isEmpty()) {
             List<ItemCarritoDTO> itemsDTO = carrito.getItems().stream()
                     .map(this::convertToItemCarritoDTO)
-                    .collect(Collectors.toList());
+                    .toList();
             dto.setItems(itemsDTO);
         }
 
@@ -344,6 +343,51 @@ public class DTOConverterService {
         dto.setFechaCreacion(item.getFechaCreacion());
         dto.setUltimaActualizacion(item.getUltimaActualizacion());
 
+        return dto;
+    }
+
+    /**
+     * Convierte un ItemOrden a ItemOrdenDTO con información completa
+     */
+    public ItemOrdenDTO convertToItemOrdenDTO(ItemOrden itemOrden) {
+        if (itemOrden == null) {
+            return null;
+        }
+
+        ItemOrdenDTO dto = new ItemOrdenDTO();
+        
+        dto.setId(itemOrden.getId());
+        dto.setNombre(itemOrden.getNombre());
+        dto.setCantidad(itemOrden.getCantidad());
+        dto.setPrecioUnitario(itemOrden.getPrecioUnitario());
+        dto.setSubtotal(itemOrden.getSubtotal());
+        
+        // Obtener nombres de color y talla si están disponibles
+        if (itemOrden.getColor() != null) {
+            dto.setColorNombre(itemOrden.getColor().getNombre());
+        }
+        
+        if (itemOrden.getTalla() != null) {
+            dto.setTallaNombre(itemOrden.getTalla().getNombre());
+        }
+        
+        // Información del tipo de ítem
+        if (itemOrden.getTipoItem() != null) {
+            dto.setTipoItem(itemOrden.getTipoItem().getNombre());
+        }
+        
+        // Información completa del producto
+        if (itemOrden.getProducto() != null) {
+            dto.setProductoId(itemOrden.getProducto().getId());
+            dto.setProducto(convertToProductoDTO(itemOrden.getProducto()));
+        }
+        
+        // Información completa del diseño personalizado
+        if (itemOrden.getDisenoPersonalizado() != null) {
+            dto.setDisenoPersonalizadoId(itemOrden.getDisenoPersonalizado().getId());
+            dto.setDisenoPersonalizado(convertToDisenoDTO(itemOrden.getDisenoPersonalizado()));
+        }
+        
         return dto;
     }
 
