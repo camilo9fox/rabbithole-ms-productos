@@ -196,9 +196,23 @@ public class CarritoService {
             nuevoItem.setTipoItem(tipoItem);
             
             nuevoItem.setCantidad(cantidad);
+        
+        // Usar precio del diseño personalizado si no se proporciona un precio válido
+        if (precioUnitario == null || precioUnitario.compareTo(BigDecimal.ZERO) <= 0) {
+            // Si el diseño personalizado tiene un precio asignado, usarlo
+            if (diseno.getPrecio() != null && diseno.getPrecio().compareTo(BigDecimal.ZERO) > 0) {
+                nuevoItem.setPrecioUnitario(diseno.getPrecio());
+                System.out.println("Usando precio del diseño personalizado: " + diseno.getPrecio());
+            } else {
+                // Precio por defecto
+                nuevoItem.setPrecioUnitario(new BigDecimal("29.99"));
+                System.out.println("Usando precio por defecto para diseño personalizado");
+            }
+        } else {
             nuevoItem.setPrecioUnitario(precioUnitario);
-            
-            carrito.addItem(nuevoItem);
+        }
+        
+        carrito.addItem(nuevoItem);
         }
         
         return carritoRepository.save(carrito);
