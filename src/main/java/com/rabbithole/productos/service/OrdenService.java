@@ -12,8 +12,17 @@ import com.rabbithole.productos.repository.*;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.math.BigDecimal;
+// Importaciones SQL eliminadas ya que no se usan
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -22,11 +31,17 @@ import java.util.UUID;
 @Service
 public class OrdenService {
     
+    // Logger para registros
+    private static final Logger logger = LoggerFactory.getLogger(OrdenService.class);
+
     // Constantes para estados de orden
     private static final String ESTADO_PENDIENTE_NOMBRE = "PENDIENTE";
     private static final String ESTADO_PENDIENTE_CODIGO = "1 PENDING";
     private static final String ESTADO_PENDIENTE_DESCRIPCION = "La orden está pendiente de pago";
     
+    // EntityManager para acceso a JDBC directo
+    @PersistenceContext
+    private EntityManager entityManager;
 
     private final OrdenRepository ordenRepository;
     private final EstadoOrdenRepository estadoOrdenRepository;
@@ -40,6 +55,9 @@ public class OrdenService {
     private final InfoPagoRepository infoPagoRepository;
     private final DTOConverterService dtoConverterService;
     private final TipoItemRepository tipoItemRepository;
+    private final ThumbnailItemRepository thumbnailItemRepository;
+    private final TipoAnguloRepository tipoAnguloRepository;
+    private final CloudinaryResourceRepository cloudinaryResourceRepository;
     
     /**
      * Constructor con inyección de dependencias.
@@ -56,7 +74,11 @@ public class OrdenService {
             InfoEnvioRepository infoEnvioRepository,
             InfoPagoRepository infoPagoRepository,
             DTOConverterService dtoConverterService,
-            TipoItemRepository tipoItemRepository) {
+            TipoItemRepository tipoItemRepository,
+            ThumbnailItemRepository thumbnailItemRepository,
+            TipoAnguloRepository tipoAnguloRepository,
+            CloudinaryResourceRepository cloudinaryResourceRepository,
+            ItemOrdenRepository itemOrdenRepository) {
         this.ordenRepository = ordenRepository;
         this.estadoOrdenRepository = estadoOrdenRepository;
         this.usuarioRepository = usuarioRepository;
@@ -69,6 +91,9 @@ public class OrdenService {
         this.infoPagoRepository = infoPagoRepository;
         this.dtoConverterService = dtoConverterService;
         this.tipoItemRepository = tipoItemRepository;
+        this.thumbnailItemRepository = thumbnailItemRepository;
+        this.tipoAnguloRepository = tipoAnguloRepository;
+        this.cloudinaryResourceRepository = cloudinaryResourceRepository;
     }
 
     /**
@@ -86,6 +111,149 @@ public class OrdenService {
                 .toList();
     }
 
+    /**
+     * Migra los thumbnails desde los ítems del carrito a los ítems de la orden.
+     * En lugar de eliminar y recrear thumbnails, simplemente actualiza las referencias.
+     * 
+     * @param itemsCarrito Lista de ítems del carrito
+     * @param itemsOrden Lista de ítems de la orden
+     */
+    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW)
+    protected void migrarThumbnails(List<ItemCarrito> itemsCarrito, List<ItemOrden> itemsOrden) {
+        logger.info("Iniciando migración de thumbnails de {} ítems del carrito a {} ítems de orden", 
+                itemsCarrito.size(), itemsOrden.size());
+        
+        // Crear un mapa para relacionar cada ítem del carrito con su respectivo ítem de orden
+        // Usamos producto o diseñoPersonalizado + color + talla para hacer coincidir los ítems
+        Map<String, ItemOrden> mapaItemsOrden = new HashMap<>();
+        
+        for (ItemOrden itemOrden : itemsOrden) {
+            String clave = generarClaveItem(itemOrden);
+            mapaItemsOrden.put(clave, itemOrden);
+        }
+        
+        // Para cada ítem del carrito, buscar sus thumbnails y actualizarlos
+        for (ItemCarrito itemCarrito : itemsCarrito) {
+            String claveItemCarrito = generarClaveItem(itemCarrito);
+            ItemOrden itemOrdenCorrespondiente = mapaItemsOrden.get(claveItemCarrito);
+            
+            if (itemOrdenCorrespondiente == null) {
+                logger.warn("No se encontró ítem de orden correspondiente para el ítem de carrito: {}. Saltando migración de thumbnails.", itemCarrito.getId());
+                continue;
+            }
+            
+            migrarThumbnailsParaItem(itemCarrito.getId(), itemOrdenCorrespondiente);
+        }
+        
+        logger.info("Migración de thumbnails completada con éxito");
+    }
+    
+    /**
+     * Migra los thumbnails de un ítem de carrito específico a un ítem de orden.
+     * Este método usa una transacción separada para cada ítem.
+     * 
+     * @param itemCarritoId ID del ítem del carrito
+     * @param itemOrden Ítem de orden al que migrar los thumbnails
+     */
+    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW)
+    protected void migrarThumbnailsParaItem(Long itemCarritoId, ItemOrden itemOrden) {
+        try {
+            // Asegurarnos que tenemos el ItemOrden completamente inicializado y gestionado por JPA
+            ItemOrden itemOrdenGestionado = entityManager.find(ItemOrden.class, itemOrden.getId());
+            if (itemOrdenGestionado == null) {
+                logger.error("No se encontró el ítem de orden con ID {} en la base de datos", itemOrden.getId());
+                return;
+            }
+            
+            logger.debug("Buscando thumbnails para el ítem de carrito ID={}", itemCarritoId);
+            
+            // Ejecutar una query nativa para actualizar directamente en la base de datos las asociaciones
+            // Esto evita los problemas de validación de entidades y objetos transient
+            String updateQuery = "UPDATE thumbnails_item SET item_orden_id = ?, item_carrito_id = NULL WHERE item_carrito_id = ?";
+            int actualizados = entityManager.createNativeQuery(updateQuery)
+                    .setParameter(1, itemOrdenGestionado.getId())
+                    .setParameter(2, itemCarritoId)
+                    .executeUpdate();
+            
+            // Forzar la sincronización con la base de datos
+            entityManager.flush();
+            
+            if (actualizados > 0) {
+                logger.info("Actualizados {} thumbnails del ítem de carrito {} al ítem de orden {}", 
+                        actualizados, itemCarritoId, itemOrdenGestionado.getId());
+                
+                // Realizar una consulta de verificación para confirmar que la migración fue exitosa
+                int countVerificacion = ((Number) entityManager.createNativeQuery(
+                        "SELECT COUNT(*) FROM thumbnails_item WHERE item_orden_id = ?")
+                        .setParameter(1, itemOrdenGestionado.getId())
+                        .getSingleResult()).intValue();
+                
+                logger.info("Verificación: hay {} thumbnails asociados ahora al itemOrden {}", 
+                        countVerificacion, itemOrdenGestionado.getId());
+            } else {
+                logger.info("No se encontraron thumbnails para el ítem de carrito {}", itemCarritoId);
+            }
+            
+        } catch (Exception e) {
+            logger.error("Error al migrar thumbnails del ítem de carrito {} al ítem de orden {}: {}", 
+                    itemCarritoId, itemOrden.getId(), e.getMessage(), e);
+            // Propagamos la excepción para que Spring pueda manejar el rollback apropiadamente
+            throw new RuntimeException("Error al migrar thumbnails: " + e.getMessage(), e);
+        }
+    }
+    
+    /**
+     * Genera una clave única para identificar ítems basándose en su contenido.
+     * Esta clave se usa para relacionar los ítems de carrito con sus correspondientes ítems de orden.
+     * 
+     * @param item Puede ser un ItemCarrito o un ItemOrden
+     * @return Clave única que identifica el ítem
+     */
+    private String generarClaveItem(Object item) {
+        StringBuilder clave = new StringBuilder();
+        
+        if (item instanceof ItemCarrito) {
+            ItemCarrito itemCarrito = (ItemCarrito) item;
+            
+            // Identificar por producto o diseño personalizado
+            if (itemCarrito.getProducto() != null) {
+                clave.append("P").append(itemCarrito.getProducto().getId());
+            } else if (itemCarrito.getDisenoPersonalizado() != null) {
+                clave.append("D").append(itemCarrito.getDisenoPersonalizado().getId());
+            }
+            
+            // Añadir color y talla si existen
+            if (itemCarrito.getColor() != null) {
+                clave.append("_C").append(itemCarrito.getColor().getId());
+            }
+            
+            if (itemCarrito.getTalla() != null) {
+                clave.append("_T").append(itemCarrito.getTalla().getId());
+            }
+            
+        } else if (item instanceof ItemOrden) {
+            ItemOrden itemOrden = (ItemOrden) item;
+            
+            // Identificar por producto o diseño personalizado
+            if (itemOrden.getProducto() != null) {
+                clave.append("P").append(itemOrden.getProducto().getId());
+            } else if (itemOrden.getDisenoPersonalizado() != null) {
+                clave.append("D").append(itemOrden.getDisenoPersonalizado().getId());
+            }
+            
+            // Añadir color y talla si existen
+            if (itemOrden.getColor() != null) {
+                clave.append("_C").append(itemOrden.getColor().getId());
+            }
+            
+            if (itemOrden.getTalla() != null) {
+                clave.append("_T").append(itemOrden.getTalla().getId());
+            }
+        }
+        
+        return clave.toString();
+    }
+    
     /**
      * Obtiene una orden por su ID.
      * 
@@ -225,6 +393,9 @@ public class OrdenService {
         infoPago.setUltimosDigitos(crearOrdenDTO.getInfoPago().getUltimosDigitos());
         infoPago.setIdTransaccion(crearOrdenDTO.getInfoPago().getIdTransaccion());
         infoPagoRepository.save(infoPago);
+        
+        // Migrar los thumbnails de los items del carrito a los items de la orden antes de vaciar el carrito
+        migrarThumbnails(carrito.getItems(), nuevaOrden.getItems());
         
         // Vaciar el carrito después de crear la orden
         carritoService.vaciarCarrito(carrito.getId());
@@ -393,11 +564,8 @@ public class OrdenService {
                 System.out.println("Asignando tipoItemId por defecto: " + tipoItemId);
             }
             
-            // Asegurarse de que tipoItemId nunca sea nulo
-            if (tipoItemId == null) {
-                tipoItemId = 1L; // Valor de último recurso
-                System.out.println("ATENCIÓN: Usando valor de último recurso para tipoItemId");
-            }
+            // La comprobación de null se eliminó porque tipoItemId nunca puede ser null en este punto
+            // debido a la asignación en el bloque if-else anterior
             
             // IMPORTANTE: Buscar y establecer la entidad TipoItem completa (no solo el ID)
             final Long finalTipoItemId = tipoItemId; // Capturar el valor en una variable final para la lambda

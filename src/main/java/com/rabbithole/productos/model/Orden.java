@@ -1,9 +1,11 @@
 package com.rabbithole.productos.model;
 
 import jakarta.persistence.*;
-import lombok.Data;
-import lombok.NoArgsConstructor;
 import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.EqualsAndHashCode;
+import lombok.NoArgsConstructor;
+import lombok.ToString;
 import com.fasterxml.jackson.annotation.JsonManagedReference;
 
 import java.io.Serializable;
@@ -21,6 +23,7 @@ import java.util.List;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
+@EqualsAndHashCode(onlyExplicitlyIncluded = false)
 public class Orden implements Serializable {
 
     @Id
@@ -89,6 +92,8 @@ public class Orden implements Serializable {
      */
     @OneToOne(mappedBy = "orden", cascade = CascadeType.ALL, orphanRemoval = true)
     @JsonManagedReference
+    @EqualsAndHashCode.Exclude
+    @ToString.Exclude
     private InfoEnvio infoEnvio;
     
     /**
@@ -97,6 +102,8 @@ public class Orden implements Serializable {
      */
     @OneToOne(mappedBy = "orden", cascade = CascadeType.ALL, orphanRemoval = true)
     @JsonManagedReference
+    @EqualsAndHashCode.Exclude
+    @ToString.Exclude
     private InfoPago infoPago;
 
     /**

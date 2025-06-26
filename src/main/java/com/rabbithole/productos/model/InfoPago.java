@@ -3,7 +3,9 @@ package com.rabbithole.productos.model;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
+import lombok.ToString;
 import com.fasterxml.jackson.annotation.JsonBackReference;
 
 import java.io.Serializable;
@@ -17,6 +19,7 @@ import java.io.Serializable;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
+@EqualsAndHashCode(onlyExplicitlyIncluded = false)
 public class InfoPago implements Serializable {
     
     private static final long serialVersionUID = 1L;
@@ -56,6 +59,8 @@ public class InfoPago implements Serializable {
     @OneToOne
     @JoinColumn(name = "orden_id", nullable = false)
     @JsonBackReference
+    @EqualsAndHashCode.Exclude
+    @ToString.Exclude
     private Orden orden;
     
     public void setOrden(Orden orden) {

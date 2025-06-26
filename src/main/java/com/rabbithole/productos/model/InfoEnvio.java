@@ -2,7 +2,9 @@ package com.rabbithole.productos.model;
 
 import jakarta.persistence.*;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
+import lombok.ToString;
 import com.fasterxml.jackson.annotation.JsonBackReference;
 
 import java.io.Serializable;
@@ -15,6 +17,7 @@ import java.io.Serializable;
 @Table(name = "info_envio")
 @Data
 @NoArgsConstructor
+@EqualsAndHashCode(onlyExplicitlyIncluded = false)
 public class InfoEnvio implements Serializable {
     
     private static final long serialVersionUID = 1L;
@@ -78,6 +81,8 @@ public class InfoEnvio implements Serializable {
     @OneToOne
     @JoinColumn(name = "orden_id", nullable = false)
     @JsonBackReference
+    @EqualsAndHashCode.Exclude
+    @ToString.Exclude
     private Orden orden;
     
     @PrePersist
