@@ -1,6 +1,8 @@
 package com.rabbithole.productos.dto;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * DTO para representar un ítem de orden
@@ -18,6 +20,12 @@ public class ItemOrdenDTO {
     private ProductoDTO producto;
     private Long disenoPersonalizadoId;
     private DisenoPersonalizadoDTO disenoPersonalizado;
+    private List<ThumbnailItemDTO> thumbnails;
+    
+    // Constructor vacío para serialización/deserialización
+    public ItemOrdenDTO() {
+        thumbnails = new ArrayList<>();
+    }
     
     // Getters y Setters
     public Long getId() {
@@ -114,5 +122,13 @@ public class ItemOrdenDTO {
     
     public void setDisenoPersonalizado(DisenoPersonalizadoDTO disenoPersonalizado) {
         this.disenoPersonalizado = disenoPersonalizado;
+    }
+    
+    public List<ThumbnailItemDTO> getThumbnails() {
+        return thumbnails;
+    }
+    
+    public void setThumbnails(List<ThumbnailItemDTO> thumbnails) {
+        this.thumbnails = thumbnails;
     }
 }

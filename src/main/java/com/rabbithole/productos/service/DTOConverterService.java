@@ -388,9 +388,17 @@ public class DTOConverterService {
             dto.setDisenoPersonalizado(convertToDisenoDTO(itemOrden.getDisenoPersonalizado()));
         }
         
+        // Convertir thumbnails si existen
+        if (itemOrden.getThumbnail() != null && !itemOrden.getThumbnail().isEmpty()) {
+            List<ThumbnailItemDTO> thumbnailDTOs = itemOrden.getThumbnail().stream()
+                    .map(this::convertToThumbnailItemDTO)
+                    .collect(java.util.stream.Collectors.toList());
+            dto.setThumbnails(thumbnailDTOs);
+        }
+        
         return dto;
     }
-
+    
     /**
      * Convierte un ThumbnailItem a ThumbnailItemDTO
      */
