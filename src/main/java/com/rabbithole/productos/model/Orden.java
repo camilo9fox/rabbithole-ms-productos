@@ -45,6 +45,7 @@ public class Orden implements Serializable {
      */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "estado_id", nullable = false)
+    @com.fasterxml.jackson.annotation.JsonBackReference
     private EstadoOrden estado;
 
     /**
