@@ -419,22 +419,25 @@ public class OrdenService {
      * Actualiza el estado de una orden.
      * 
      * @param ordenId ID de la orden
-     * @param estadoNombre Nombre del nuevo estado
+     * @param estadoId ID del nuevo estado
      * @return DTO de la orden actualizada
      */
     @Transactional
-    public OrdenDTO actualizarEstadoOrden(Long ordenId, String estadoNombre) {
+    public OrdenDTO actualizarEstadoOrden(Long ordenId, Long estadoId) {
         Orden orden = ordenRepository.findById(ordenId)
                 .orElseThrow(() -> new ResourceNotFoundException("Orden no encontrada con ID: " + ordenId));
         
-        EstadoOrden nuevoEstado = estadoOrdenRepository.findByNombre(estadoNombre);
-        if (nuevoEstado == null) {
-            // Si no existe, crear el estado
-            nuevoEstado = new EstadoOrden();
-            nuevoEstado.setNombre(estadoNombre);
-            nuevoEstado = estadoOrdenRepository.save(nuevoEstado);
-        }
+        EstadoOrden nuevoEstado = estadoOrdenRepository.findById(estadoId)
+                .orElseThrow(() -> new ResourceNotFoundException("Estado no encontrado con ID: " + estadoId));
         
+        // Registrar el cambio de estado en el historial
+        HistorialEstadosOrden historialEstado = new HistorialEstadosOrden();
+        historialEstado.setEstado(nuevoEstado);
+        historialEstado.setOrden(orden);
+        // La fecha se establecerá automáticamente en el onCreate() del modelo
+        orden.addHistorialEstado(historialEstado);
+        
+        // Actualizar el estado actual de la orden
         orden.setEstado(nuevoEstado);
         orden = ordenRepository.save(orden);
         
@@ -498,8 +501,14 @@ public class OrdenService {
      */
     @Transactional
     public OrdenDTO cancelarOrden(Long ordenId) {
+        // Buscar el estado CANCELED por su código
+        EstadoOrden estadoCancelado = estadoOrdenRepository.findByCodigo("CANCELED");
+        if (estadoCancelado == null) {
+            throw new ResourceNotFoundException("Estado CANCELED no encontrado en la base de datos");
+        }
+        
         // No usar this para evitar proxy bypass en métodos transaccionales
-        return actualizarEstadoOrden(ordenId, "CANCELADA");
+        return actualizarEstadoOrden(ordenId, estadoCancelado.getId());
     }
     
     /**

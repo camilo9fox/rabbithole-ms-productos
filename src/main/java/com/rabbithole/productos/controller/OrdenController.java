@@ -11,6 +11,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * Controlador REST para operaciones relacionadas con órdenes.
@@ -73,15 +74,39 @@ public class OrdenController {
     /**
      * Actualiza el estado de una orden.
      * 
-     * @param id     ID de la orden
-     * @param estado Nuevo estado
+     * @param id        ID de la orden
+     * @param estadoId  ID del nuevo estado (puede venir como parámetro de consulta o en el cuerpo)
+     * @param requestBody Cuerpo de la solicitud que puede contener el estadoId
      * @return La orden actualizada
      */
     @PutMapping("/{id}/estado")
     public ResponseEntity<OrdenDTO> actualizarEstadoOrden(
             @PathVariable Long id,
-            @RequestParam String estado) {
-        OrdenDTO ordenActualizada = ordenService.actualizarEstadoOrden(id, estado);
+            @RequestParam(required = false) Long estadoId,
+            @RequestBody(required = false) Map<String, Object> requestBody) {
+        
+        Long estadoIdFinal = estadoId;
+        
+        // Si no se proporcionó por parámetro, intentamos extraerlo del cuerpo
+        if (estadoIdFinal == null && requestBody != null && requestBody.containsKey("estadoId")) {
+            Object estadoIdObj = requestBody.get("estadoId");
+            if (estadoIdObj instanceof Number number) {
+                estadoIdFinal = number.longValue();
+            } else if (estadoIdObj instanceof String string) {
+                try {
+                    estadoIdFinal = Long.parseLong(string);
+                } catch (NumberFormatException e) {
+                    throw new IllegalArgumentException("El estadoId debe ser un número válido");
+                }
+            }
+        }
+        
+        // Verificar que se proporcionó el ID del estado
+        if (estadoIdFinal == null) {
+            throw new IllegalArgumentException("Se requiere el ID del estado para actualizar la orden");
+        }
+        
+        OrdenDTO ordenActualizada = ordenService.actualizarEstadoOrden(id, estadoIdFinal);
         return new ResponseEntity<>(ordenActualizada, HttpStatus.OK);
     }
 

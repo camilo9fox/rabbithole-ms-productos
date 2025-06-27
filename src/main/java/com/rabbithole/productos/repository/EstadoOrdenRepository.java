@@ -17,4 +17,12 @@ public interface EstadoOrdenRepository extends JpaRepository<EstadoOrden, Long> 
      * @return El estado de orden encontrado
      */
     EstadoOrden findByNombre(String nombre);
+    
+    /**
+     * Encuentra un estado de orden por su código.
+     * 
+     * @param codigo Código del estado de orden (ej: PENDING, PAID, SHIPPED, CANCELED)
+     * @return El estado de orden encontrado
+     */
+    EstadoOrden findByCodigo(String codigo);
 }
