@@ -871,4 +871,44 @@ private void actualizarElemento(ElementoDTO elementoDTO, AnguloDiseno anguloExis
             throw new RuntimeException("Error al eliminar diseño personalizado: " + e.getMessage(), e);
         }
     }
+    
+    @Override
+    @Transactional
+    public DisenoPersonalizadoDTO actualizarEstadoDiseno(Long id, Long estadoId, String motivoRechazo, String notasModificacion) {
+        log.info("Actualizando estado del diseño personalizado con id: {} a estadoId: {}", id, estadoId);
+        
+        try {
+            // 1. Verificar si el diseño existe
+            DisenoPersonalizado diseno = disenoPersonalizadoRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Diseño personalizado no encontrado con ID: " + id));
+            
+            // 2. Verificar si el estado existe
+            EstadoDiseno nuevoEstado = estadoDisenoRepository.findById(estadoId)
+                .orElseThrow(() -> new RuntimeException("Estado de diseño no encontrado con ID: " + estadoId));
+            
+            // 3. Actualizar el estado del diseño
+            diseno.setEstado(nuevoEstado);
+            
+            // 4. Actualizar campos adicionales si se proporcionan
+            if (motivoRechazo != null) {
+                diseno.setMotivoRechazo(motivoRechazo);
+            }
+            
+            if (notasModificacion != null) {
+                diseno.setNotasModificacion(notasModificacion);
+            }
+            
+            // 5. Guardar el diseño actualizado
+            DisenoPersonalizado disenoActualizado = disenoPersonalizadoRepository.save(diseno);
+            
+            log.info("Estado del diseño personalizado con id: {} actualizado exitosamente a: {}", 
+                    id, nuevoEstado.getNombre());
+            
+            // 6. Convertir y devolver el DTO actualizado
+            return mapper.toDTO(disenoActualizado);
+        } catch (Exception e) {
+            log.error("Error al actualizar estado del diseño personalizado: {}", e.getMessage(), e);
+            throw new RuntimeException("Error al actualizar estado del diseño personalizado: " + e.getMessage(), e);
+        }
+    }
 }

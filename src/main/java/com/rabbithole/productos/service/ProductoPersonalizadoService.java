@@ -51,4 +51,15 @@ public interface ProductoPersonalizadoService {
      * @param id ID del diseño a eliminar
      */
     void eliminarDisenoPersonalizado(Long id);
+    
+    /**
+     * Actualiza el estado de un diseño personalizado
+     * 
+     * @param id ID del diseño personalizado
+     * @param estadoId ID del nuevo estado
+     * @param motivoRechazo Motivo del rechazo (opcional, solo aplicable para estados de rechazo)
+     * @param notasModificacion Notas de modificación (opcional, para explicaciones adicionales)
+     * @return El diseño personalizado actualizado
+     */
+    DisenoPersonalizadoDTO actualizarEstadoDiseno(Long id, Long estadoId, String motivoRechazo, String notasModificacion);
 }

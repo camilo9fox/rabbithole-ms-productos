@@ -9,6 +9,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * Controlador para gestionar productos personalizados y todas sus entidades relacionadas
@@ -72,5 +73,69 @@ public class ProductoPersonalizadoController {
         log.info("Solicitud para eliminar producto personalizado con ID: {}", id);
         productoPersonalizadoService.eliminarDisenoPersonalizado(id);
         return ResponseEntity.noContent().build();
+    }
+    
+    /**
+     * Endpoint para actualizar el estado de un producto personalizado
+     * Acepta el estadoId ya sea como parámetro de consulta o en el cuerpo de la solicitud
+     */
+    @PutMapping("/{id}/estado")
+    public ResponseEntity<DisenoPersonalizadoDTO> actualizarEstadoDiseno(
+            @PathVariable Long id,
+            @RequestParam(required = false) Long estadoId,
+            @RequestBody(required = false) Map<String, Object> requestBody) {
+        
+        log.info("Solicitud para actualizar estado del producto personalizado con ID: {}", id);
+        
+        // Extraer parámetros del body o query params
+        Long estadoIdFinal = obtenerEstadoId(estadoId, requestBody);
+        String motivoRechazo = extraerCampoTexto(requestBody, "motivoRechazo");
+        String notasModificacion = extraerCampoTexto(requestBody, "notasModificacion");
+        
+        // Llamar al servicio para actualizar el estado
+        DisenoPersonalizadoDTO disenoActualizado = productoPersonalizadoService.actualizarEstadoDiseno(
+                id, estadoIdFinal, motivoRechazo, notasModificacion);
+        
+        return ResponseEntity.ok(disenoActualizado);
+    }
+    
+    /**
+     * Extrae y valida el ID del estado desde parámetros de consulta o cuerpo de la solicitud
+     */
+    private Long obtenerEstadoId(Long estadoIdParam, Map<String, Object> requestBody) {
+        // Si ya viene como parámetro, lo usamos directamente
+        if (estadoIdParam != null) {
+            return estadoIdParam;
+        }
+        
+        // Si no, intentamos extraerlo del cuerpo
+        if (requestBody != null && requestBody.containsKey("estadoId")) {
+            Object estadoIdObj = requestBody.get("estadoId");
+            if (estadoIdObj instanceof Number number) {
+                return number.longValue();
+            } else if (estadoIdObj instanceof String string) {
+                try {
+                    return Long.parseLong(string);
+                } catch (NumberFormatException e) {
+                    throw new IllegalArgumentException("El estadoId debe ser un número válido");
+                }
+            }
+        }
+        
+        // Si no se encontró el estadoId
+        throw new IllegalArgumentException("Se debe proporcionar el estadoId como parámetro de consulta o en el cuerpo de la solicitud");
+    }
+    
+    /**
+     * Extrae un campo de texto del cuerpo de la solicitud
+     */
+    private String extraerCampoTexto(Map<String, Object> requestBody, String nombreCampo) {
+        if (requestBody != null && requestBody.containsKey(nombreCampo)) {
+            Object obj = requestBody.get(nombreCampo);
+            if (obj instanceof String string) {
+                return string;
+            }
+        }
+        return null;
     }
 }
