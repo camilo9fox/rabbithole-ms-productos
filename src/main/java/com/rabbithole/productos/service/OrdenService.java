@@ -112,6 +112,20 @@ public class OrdenService {
     }
 
     /**
+     * Obtiene todas las órdenes del sistema.
+     * 
+     * @return Lista de DTOs de todas las órdenes
+     */
+    @Transactional(readOnly = true)
+    public List<OrdenDTO> obtenerTodasLasOrdenes() {
+        logger.info("Obteniendo todas las órdenes del sistema");
+        List<Orden> ordenes = ordenRepository.findAll();
+        return ordenes.stream()
+                .map(this::convertirAOrdenDTO)
+                .toList();
+    }
+
+    /**
      * Migra los thumbnails desde los ítems del carrito a los ítems de la orden.
      * En lugar de eliminar y recrear thumbnails, simplemente actualiza las referencias.
      * 

@@ -36,6 +36,17 @@ public class OrdenController {
     }
 
     /**
+     * Obtiene todas las órdenes del sistema.
+     * 
+     * @return Lista de todas las órdenes
+     */
+    @GetMapping
+    public ResponseEntity<List<OrdenDTO>> obtenerTodasLasOrdenes() {
+        List<OrdenDTO> ordenes = ordenService.obtenerTodasLasOrdenes();
+        return new ResponseEntity<>(ordenes, HttpStatus.OK);
+    }
+
+    /**
      * Obtiene una orden específica por su ID.
      * 
      * @param id ID de la orden
