@@ -120,32 +120,29 @@ public class OrdenService {
      */
     @Transactional(propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW)
     protected void migrarThumbnails(List<ItemCarrito> itemsCarrito, List<ItemOrden> itemsOrden) {
-        logger.info("Iniciando migración de thumbnails de {} ítems del carrito a {} ítems de orden", 
-                itemsCarrito.size(), itemsOrden.size());
-        
-        // Crear un mapa para relacionar cada ítem del carrito con su respectivo ítem de orden
-        // Usamos producto o diseñoPersonalizado + color + talla para hacer coincidir los ítems
         Map<String, ItemOrden> mapaItemsOrden = new HashMap<>();
-        
+        // Crear un mapa de ítems de orden por su clave única
         for (ItemOrden itemOrden : itemsOrden) {
             String clave = generarClaveItem(itemOrden);
             mapaItemsOrden.put(clave, itemOrden);
         }
         
-        // Para cada ítem del carrito, buscar sus thumbnails y actualizarlos
+        // Procesar cada ítem del carrito
         for (ItemCarrito itemCarrito : itemsCarrito) {
             String claveItemCarrito = generarClaveItem(itemCarrito);
             ItemOrden itemOrdenCorrespondiente = mapaItemsOrden.get(claveItemCarrito);
+            if (itemOrdenCorrespondiente == null) continue; // No se encontró un ítem de orden correspondiente
             
-            if (itemOrdenCorrespondiente == null) {
-                logger.warn("No se encontró ítem de orden correspondiente para el ítem de carrito: {}. Saltando migración de thumbnails.", itemCarrito.getId());
-                continue;
-            }
-            
+            // Migrar los thumbnails del ítem del carrito al ítem de orden correspondiente
             migrarThumbnailsParaItem(itemCarrito.getId(), itemOrdenCorrespondiente);
         }
         
-        logger.info("Migración de thumbnails completada con éxito");
+        // Importante: Refrescar cada ítem de orden para cargar sus thumbnails después de la migración
+        for (ItemOrden item : itemsOrden) {
+            entityManager.refresh(item);
+            logger.info("ItemOrden {} refrescado, tiene {} thumbnails", item.getId(), 
+                    item.getThumbnails() != null ? item.getThumbnails().size() : 0);
+        }
     }
     
     /**
