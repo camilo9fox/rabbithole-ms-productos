@@ -160,8 +160,8 @@ public class OrdenService {
     }
     
     /**
-     * Migra los thumbnails de un ítem de carrito específico a un ítem de orden.
-     * Este método usa una transacción separada para cada ítem.
+     * Migra los thumbnails de un ítem de carrito específico a un ítem de orden
+     * creando nuevos objetos ThumbnailItem para evitar problemas de entidades transitorias.
      * 
      * @param itemCarritoId ID del ítem del carrito
      * @param itemOrden Ítem de orden al que migrar los thumbnails
@@ -178,32 +178,41 @@ public class OrdenService {
             
             logger.debug("Buscando thumbnails para el ítem de carrito ID={}", itemCarritoId);
             
-            // Ejecutar una query nativa para actualizar directamente en la base de datos las asociaciones
-            // Esto evita los problemas de validación de entidades y objetos transient
-            String updateQuery = "UPDATE thumbnails_item SET item_orden_id = ?, item_carrito_id = NULL WHERE item_carrito_id = ?";
-            int actualizados = entityManager.createNativeQuery(updateQuery)
-                    .setParameter(1, itemOrdenGestionado.getId())
-                    .setParameter(2, itemCarritoId)
-                    .executeUpdate();
+            // Recuperar todos los thumbnails asociados al ítem del carrito
+            List<ThumbnailItem> thumbnailsCarrito = entityManager.createQuery(
+                    "SELECT t FROM ThumbnailItem t WHERE t.itemCarritoId = :itemCarritoId", 
+                    ThumbnailItem.class)
+                    .setParameter("itemCarritoId", itemCarritoId)
+                    .getResultList();
+            
+            logger.info("Encontrados {} thumbnails para el ítem de carrito {}", thumbnailsCarrito.size(), itemCarritoId);
+            
+            // Para cada thumbnail del carrito, crear uno nuevo para el ítem de la orden
+            int contador = 0;
+            for (ThumbnailItem thumbCarrito : thumbnailsCarrito) {
+                // Crear un nuevo ThumbnailItem para el ítem de la orden
+                ThumbnailItem nuevoThumb = new ThumbnailItem();
+                
+                // Establecer el ítem de orden (desvinculado del ítem de carrito)
+                nuevoThumb.setItemOrden(itemOrdenGestionado);
+                nuevoThumb.setItemCarrito(null); // Explícitamente NULL para evitar problemas
+                
+                // Copiar el mismo tipo de ángulo
+                nuevoThumb.setTipoAngulo(thumbCarrito.getTipoAngulo());
+                
+                // Reutilizar el mismo cloudinary resource (no duplicamos la imagen)
+                nuevoThumb.setCloudinaryResource(thumbCarrito.getCloudinaryResource());
+                
+                // Guardar el nuevo thumbnail
+                entityManager.persist(nuevoThumb);
+                contador++;
+            }
             
             // Forzar la sincronización con la base de datos
             entityManager.flush();
             
-            if (actualizados > 0) {
-                logger.info("Actualizados {} thumbnails del ítem de carrito {} al ítem de orden {}", 
-                        actualizados, itemCarritoId, itemOrdenGestionado.getId());
-                
-                // Realizar una consulta de verificación para confirmar que la migración fue exitosa
-                int countVerificacion = ((Number) entityManager.createNativeQuery(
-                        "SELECT COUNT(*) FROM thumbnails_item WHERE item_orden_id = ?")
-                        .setParameter(1, itemOrdenGestionado.getId())
-                        .getSingleResult()).intValue();
-                
-                logger.info("Verificación: hay {} thumbnails asociados ahora al itemOrden {}", 
-                        countVerificacion, itemOrdenGestionado.getId());
-            } else {
-                logger.info("No se encontraron thumbnails para el ítem de carrito {}", itemCarritoId);
-            }
+            logger.info("Creados {} nuevos thumbnails para el ítem de orden {} a partir del ítem de carrito {}", 
+                    contador, itemOrdenGestionado.getId(), itemCarritoId);
             
         } catch (Exception e) {
             logger.error("Error al migrar thumbnails del ítem de carrito {} al ítem de orden {}: {}", 

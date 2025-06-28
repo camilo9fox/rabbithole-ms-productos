@@ -9,6 +9,7 @@ import lombok.AllArgsConstructor;
 import java.io.Serializable;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -132,9 +133,13 @@ public class ItemCarrito implements Serializable {
 
     /**
      * Lista de thumbnails asociados a este ítem del carrito.
+     * Usando cascadas específicas en lugar de ALL para evitar problemas de entidades transitorias
+     * durante la creación de órdenes a partir de carritos.
      */
-    @OneToMany(mappedBy = "itemCarrito", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
-    private List<ThumbnailItem> thumbnails;
+    @OneToMany(mappedBy = "itemCarrito", 
+               cascade = {CascadeType.PERSIST, CascadeType.MERGE, CascadeType.REMOVE}, 
+               orphanRemoval = true, fetch = FetchType.EAGER)
+    private List<ThumbnailItem> thumbnails = new ArrayList<>();
 
     /**
      * Fecha de creación del ítem.
