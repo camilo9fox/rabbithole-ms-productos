@@ -147,9 +147,9 @@ public class ThumbnailItemService {
             // Crear el thumbnail
             System.out.println("Creando registro de thumbnail");
             ThumbnailItem thumbnail = new ThumbnailItem();
-            // Establecemos tanto el ID como la entidad para asegurar la correcta relación
-            thumbnail.setItemCarritoId(itemCarritoId);
+            // Establecer solo la entidad, no el ID directamente para respetar insertable=false, updatable=false
             thumbnail.setItemCarrito(itemCarrito);
+            thumbnail.setItemOrden(null); // Establecer explícitamente a NULL para cumplir con la restricción CHECK
             thumbnail.setTipoAngulo(tipoAngulo);
             thumbnail.setCloudinaryResource(cloudinaryResource);
 
@@ -174,7 +174,7 @@ public class ThumbnailItemService {
     @Transactional
     public ThumbnailItemDTO uploadThumbnailForItemOrden(Long itemOrdenId, Long tipoAnguloId, String base64Image) {
         // Verificar que el ítem de orden existe
-        itemOrdenRepository.findById(itemOrdenId)
+        var itemOrden = itemOrdenRepository.findById(itemOrdenId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
                         ERROR_ITEM_ORDEN_NO_ENCONTRADO + itemOrdenId));
 
@@ -221,7 +221,8 @@ public class ThumbnailItemService {
 
         // Crear el thumbnail
         ThumbnailItem thumbnail = new ThumbnailItem();
-        thumbnail.setItemOrdenId(itemOrdenId);
+        thumbnail.setItemOrden(itemOrden); // Establecer la entidad, no el ID
+        thumbnail.setItemCarrito(null); // Establecer explícitamente a NULL para cumplir con la restricción CHECK
         thumbnail.setTipoAngulo(tipoAngulo);
         thumbnail.setCloudinaryResource(cloudinaryResource);
 
@@ -240,7 +241,7 @@ public class ThumbnailItemService {
         // Determinar si es para ítem de carrito o ítem de orden
         if (requestDTO.getItemCarritoId() != null) {
             // Verificar que el ítem existe
-            itemCarritoRepository.findById(requestDTO.getItemCarritoId())
+            var itemCarrito = itemCarritoRepository.findById(requestDTO.getItemCarritoId())
                     .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
                             ERROR_ITEM_CARRITO_NO_ENCONTRADO + requestDTO.getItemCarritoId()));
 
@@ -249,10 +250,11 @@ public class ThumbnailItemService {
                     .findByItemCarritoIdAndTipoAnguloId(requestDTO.getItemCarritoId(), requestDTO.getTipoAnguloId())
                     .orElse(new ThumbnailItem());
 
-            thumbnail.setItemCarritoId(requestDTO.getItemCarritoId());
+            thumbnail.setItemCarrito(itemCarrito); // Usar la entidad en lugar del ID
+            thumbnail.setItemOrden(null); // Establecer explícitamente a NULL para cumplir con la restricción CHECK
         } else if (requestDTO.getItemOrdenId() != null) {
             // Verificar que el ítem existe
-            itemOrdenRepository.findById(requestDTO.getItemOrdenId())
+            var itemOrden = itemOrdenRepository.findById(requestDTO.getItemOrdenId())
                     .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
                             ERROR_ITEM_ORDEN_NO_ENCONTRADO + requestDTO.getItemOrdenId()));
 
@@ -261,7 +263,8 @@ public class ThumbnailItemService {
                     .findByItemOrdenIdAndTipoAnguloId(requestDTO.getItemOrdenId(), requestDTO.getTipoAnguloId())
                     .orElse(new ThumbnailItem());
 
-            thumbnail.setItemOrdenId(requestDTO.getItemOrdenId());
+            thumbnail.setItemOrden(itemOrden); // Usar la entidad en lugar del ID
+            thumbnail.setItemCarrito(null); // Establecer explícitamente a NULL para cumplir con la restricción CHECK
         } else {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "Debe especificar itemCarritoId o itemOrdenId");
