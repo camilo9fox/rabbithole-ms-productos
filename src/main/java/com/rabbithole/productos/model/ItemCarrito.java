@@ -122,18 +122,18 @@ public class ItemCarrito implements Serializable {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "tipo_item_id", nullable = false)
     private TipoItem tipoItem;
-    
+
     /**
      * ID del tipo de ítem, para mantener referencia explícita que se mapea a la
      * columna de la BD
      */
     @Column(name = "tipo_item_id", insertable = false, updatable = false)
     private Long tipoItemId;
-    
+
     /**
      * Lista de thumbnails asociados a este ítem del carrito.
      */
-    @OneToMany(mappedBy = "itemCarrito", fetch = FetchType.LAZY)
+    @OneToMany(mappedBy = "itemCarrito", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
     private List<ThumbnailItem> thumbnails;
 
     /**
