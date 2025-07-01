@@ -23,7 +23,7 @@ import java.util.Map;
 
 @Service
 public class ThumbnailItemService {
-    
+
     private static final String ERROR_CLOUDINARY = "Error al eliminar imagen de Cloudinary";
     private static final String ERROR_CLOUDINARY_UPLOAD = "Error al subir imagen a Cloudinary";
     private static final String ERROR_TIPO_ANGULO_NO_ENCONTRADO = "Tipo de ángulo no encontrado con ID: ";
@@ -40,12 +40,12 @@ public class ThumbnailItemService {
     private final DTOConverterService dtoConverterService;
 
     public ThumbnailItemService(ThumbnailItemRepository thumbnailItemRepository,
-                                 CloudinaryResourceRepository cloudinaryResourceRepository,
-                                 CloudinaryService cloudinaryService,
-                                 TipoAnguloRepository tipoAnguloRepository,
-                                 ItemCarritoRepository itemCarritoRepository,
-                                 ItemOrdenRepository itemOrdenRepository,
-                                 DTOConverterService dtoConverterService) {
+            CloudinaryResourceRepository cloudinaryResourceRepository,
+            CloudinaryService cloudinaryService,
+            TipoAnguloRepository tipoAnguloRepository,
+            ItemCarritoRepository itemCarritoRepository,
+            ItemOrdenRepository itemOrdenRepository,
+            DTOConverterService dtoConverterService) {
         this.thumbnailItemRepository = thumbnailItemRepository;
         this.cloudinaryResourceRepository = cloudinaryResourceRepository;
         this.cloudinaryService = cloudinaryService;
@@ -82,8 +82,9 @@ public class ThumbnailItemService {
      */
     @Transactional
     public ThumbnailItemDTO uploadThumbnailForItemCarrito(Long itemCarritoId, Long tipoAnguloId, String base64Image) {
-        System.out.println("Iniciando uploadThumbnailForItemCarrito con itemCarritoId: " + itemCarritoId + ", tipoAnguloId: " + tipoAnguloId);
-        
+        System.out.println("Iniciando uploadThumbnailForItemCarrito con itemCarritoId: " + itemCarritoId
+                + ", tipoAnguloId: " + tipoAnguloId);
+
         // Verificar que el ítem de carrito existe
         var itemCarrito = itemCarritoRepository.findById(itemCarritoId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
@@ -103,7 +104,8 @@ public class ThumbnailItemService {
                     // Si existe, eliminar el recurso de Cloudinary asociado
                     if (existing.getCloudinaryResource() != null) {
                         try {
-                            System.out.println("Eliminando recurso Cloudinary con publicId: " + existing.getCloudinaryResource().getPublicId());
+                            System.out.println("Eliminando recurso Cloudinary con publicId: "
+                                    + existing.getCloudinaryResource().getPublicId());
                             cloudinaryService.eliminarImagen(existing.getCloudinaryResource().getPublicId());
                         } catch (IOException e) {
                             System.err.println("Error al eliminar imagen de Cloudinary: " + e.getMessage());
@@ -121,7 +123,7 @@ public class ThumbnailItemService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "La imagen en formato base64 es requerida");
         }
         System.out.println("Imagen base64 recibida con longitud: " + base64Image.length());
-        
+
         // Subir imagen a Cloudinary
         Map<String, Object> uploadResult;
         try {
@@ -147,16 +149,17 @@ public class ThumbnailItemService {
             // Crear el thumbnail
             System.out.println("Creando registro de thumbnail");
             ThumbnailItem thumbnail = new ThumbnailItem();
-            // Establecer solo la entidad, no el ID directamente para respetar insertable=false, updatable=false
+            // Establecer solo la entidad, no el ID directamente para respetar
+            // insertable=false, updatable=false
             thumbnail.setItemCarrito(itemCarrito);
             thumbnail.setItemOrden(null); // Establecer explícitamente a NULL para cumplir con la restricción CHECK
             thumbnail.setTipoAngulo(tipoAngulo);
             thumbnail.setCloudinaryResource(cloudinaryResource);
 
-            System.out.println("Guardando thumbnail: itemCarritoId=" + thumbnail.getItemCarritoId() 
-                    + ", tipoAnguloId=" + tipoAngulo.getId() 
+            System.out.println("Guardando thumbnail: itemCarritoId=" + thumbnail.getItemCarritoId()
+                    + ", tipoAnguloId=" + tipoAngulo.getId()
                     + ", cloudinaryResourceId=" + cloudinaryResource.getId());
-                    
+
             ThumbnailItem savedThumbnail = thumbnailItemRepository.save(thumbnail);
             System.out.println("Thumbnail guardado exitosamente con ID: " + savedThumbnail.getId());
 
@@ -202,7 +205,7 @@ public class ThumbnailItemService {
         if (base64Image == null || base64Image.isEmpty()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "La imagen en formato base64 es requerida");
         }
-        
+
         // Subir imagen a Cloudinary
         Map<String, Object> uploadResult;
         try {
@@ -332,7 +335,7 @@ public class ThumbnailItemService {
     @Transactional
     public void deleteThumbnailsByItemCarritoId(Long itemCarritoId) {
         List<ThumbnailItem> thumbnails = thumbnailItemRepository.findByItemCarritoId(itemCarritoId);
-
+        thumbnailItemRepository.deleteByItemCarritoId(itemCarritoId);
         // Eliminar los recursos de Cloudinary asociados
         for (ThumbnailItem thumbnail : thumbnails) {
             if (thumbnail.getCloudinaryResource() != null) {
@@ -345,7 +348,6 @@ public class ThumbnailItemService {
             }
         }
 
-        thumbnailItemRepository.deleteByItemCarritoId(itemCarritoId);
     }
 
     /**
@@ -354,7 +356,7 @@ public class ThumbnailItemService {
     @Transactional
     public void deleteThumbnailsByItemOrdenId(Long itemOrdenId) {
         List<ThumbnailItem> thumbnails = thumbnailItemRepository.findByItemOrdenId(itemOrdenId);
-
+        thumbnailItemRepository.deleteByItemOrdenId(itemOrdenId);
         // Eliminar los recursos de Cloudinary asociados primero
         for (ThumbnailItem thumbnail : thumbnails) {
             if (thumbnail.getCloudinaryResource() != null) {
@@ -366,8 +368,5 @@ public class ThumbnailItemService {
                 cloudinaryResourceRepository.delete(thumbnail.getCloudinaryResource());
             }
         }
-        
-        // Ahora eliminar los thumbnails
-        thumbnailItemRepository.deleteAll(thumbnails);
     }
 }

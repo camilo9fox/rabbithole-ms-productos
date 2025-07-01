@@ -4,7 +4,9 @@ import com.fasterxml.jackson.annotation.JsonBackReference;
 import com.fasterxml.jackson.annotation.JsonManagedReference;
 import jakarta.persistence.*;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
+import lombok.ToString;
 import lombok.AllArgsConstructor;
 import java.io.Serializable;
 import java.util.List;
@@ -21,6 +23,8 @@ import java.util.HashSet;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
+@EqualsAndHashCode(exclude = { "ordenes", "historialEstados" })
+@ToString(exclude = { "ordenes", "historialEstados" })
 public class EstadoOrden implements Serializable {
 
     private static final long serialVersionUID = 1L;
@@ -53,13 +57,14 @@ public class EstadoOrden implements Serializable {
      * Órdenes que actualmente se encuentran en este estado.
      * Esta es una relación One-to-Many (un estado puede tener muchas órdenes).
      */
-    @OneToMany(mappedBy = "estado", cascade = {CascadeType.PERSIST, CascadeType.MERGE})
+    @OneToMany(mappedBy = "estado", cascade = { CascadeType.PERSIST, CascadeType.MERGE })
     @JsonManagedReference
     private Set<Orden> ordenes = new HashSet<>();
 
     /**
      * Registros de historial que utilizan este estado.
-     * Esta es una relación One-to-Many (un estado puede estar en muchos registros de historial).
+     * Esta es una relación One-to-Many (un estado puede estar en muchos registros
+     * de historial).
      */
     @OneToMany(mappedBy = "estado")
     @JsonBackReference

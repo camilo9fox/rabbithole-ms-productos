@@ -3,7 +3,9 @@ package com.rabbithole.productos.model;
 import com.fasterxml.jackson.annotation.JsonBackReference;
 import jakarta.persistence.*;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
+import lombok.ToString;
 import lombok.AllArgsConstructor;
 
 import java.io.Serializable;
@@ -21,6 +23,8 @@ import java.util.List;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
+@EqualsAndHashCode(exclude = { "thumbnails", "carrito" })
+@ToString(exclude = { "thumbnails", "carrito" })
 public class ItemCarrito implements Serializable {
 
     private static final long serialVersionUID = 1L;
@@ -133,12 +137,12 @@ public class ItemCarrito implements Serializable {
 
     /**
      * Lista de thumbnails asociados a este ítem del carrito.
-     * Usando cascadas específicas en lugar de ALL para evitar problemas de entidades transitorias
+     * Usando cascadas específicas en lugar de ALL para evitar problemas de
+     * entidades transitorias
      * durante la creación de órdenes a partir de carritos.
      */
-    @OneToMany(mappedBy = "itemCarrito", 
-               cascade = {CascadeType.PERSIST, CascadeType.MERGE, CascadeType.REMOVE}, 
-               orphanRemoval = true, fetch = FetchType.EAGER)
+    @OneToMany(mappedBy = "itemCarrito", cascade = { CascadeType.PERSIST, CascadeType.MERGE,
+            CascadeType.REMOVE }, orphanRemoval = true, fetch = FetchType.LAZY)
     private List<ThumbnailItem> thumbnails = new ArrayList<>();
 
     /**

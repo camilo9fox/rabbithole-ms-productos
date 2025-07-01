@@ -72,7 +72,7 @@ public class CarritoController {
     /**
      * Agrega un producto al carrito.
      *
-     * @param carritoId  ID del carrito
+     * @param carritoId   ID del carrito
      * @param requestBody Cuerpo JSON con los detalles del producto a agregar
      * @return Carrito actualizado en formato DTO
      */
@@ -80,14 +80,14 @@ public class CarritoController {
     public ResponseEntity<CarritoDTO> agregarProducto(
             @PathVariable Long carritoId,
             @RequestBody Map<String, Object> requestBody) {
-        
+
         Long productoId = Long.valueOf(requestBody.get("productoId").toString());
         String colorId = requestBody.get("colorId").toString();
         String tallaId = requestBody.get("tallaId").toString();
         Long tipoItemId = Long.valueOf(requestBody.get("tipoItemId").toString());
-        Integer cantidad = requestBody.containsKey("cantidad") ? 
-            Integer.valueOf(requestBody.get("cantidad").toString()) : 1;
-            
+        Integer cantidad = requestBody.containsKey("cantidad") ? Integer.valueOf(requestBody.get("cantidad").toString())
+                : 1;
+
         Carrito carrito = carritoService.agregarProductoAlCarrito(carritoId, productoId, colorId, tallaId, tipoItemId,
                 cantidad);
         CarritoDTO carritoDTO = dtoConverter.convertToCarritoDTO(carrito);
@@ -97,8 +97,9 @@ public class CarritoController {
     /**
      * Agrega un diseño personalizado al carrito.
      *
-     * @param carritoId  ID del carrito
-     * @param requestBody Cuerpo JSON con los detalles del diseño personalizado a agregar
+     * @param carritoId   ID del carrito
+     * @param requestBody Cuerpo JSON con los detalles del diseño personalizado a
+     *                    agregar
      * @return Carrito actualizado en formato DTO
      */
     @PostMapping("/{carritoId}/disenos")
@@ -111,11 +112,11 @@ public class CarritoController {
         String colorId = requestBody.get("colorId").toString();
         String tallaId = requestBody.get("tallaId").toString();
         Long tipoItemId = Long.valueOf(requestBody.get("tipoItemId").toString());
-        BigDecimal precio = requestBody.containsKey("precio") ?
-                new BigDecimal(requestBody.get("precio").toString()) : BigDecimal.ZERO;
-        Integer cantidad = requestBody.containsKey("cantidad") ? 
-                Integer.valueOf(requestBody.get("cantidad").toString()) : 1;
-                
+        BigDecimal precio = requestBody.containsKey("precio") ? new BigDecimal(requestBody.get("precio").toString())
+                : BigDecimal.ZERO;
+        Integer cantidad = requestBody.containsKey("cantidad") ? Integer.valueOf(requestBody.get("cantidad").toString())
+                : 1;
+
         Carrito carrito = carritoService.agregarDisenoPersonalizadoAlCarrito(
                 carritoId, disenoId, colorId, tallaId, tipoItemId, cantidad, precio);
         CarritoDTO carritoDTO = dtoConverter.convertToCarritoDTO(carrito);
@@ -166,7 +167,7 @@ public class CarritoController {
      */
     @DeleteMapping("/{carritoId}/items")
     public ResponseEntity<CarritoDTO> vaciarCarrito(@PathVariable Long carritoId) {
-        Carrito carrito = carritoService.vaciarCarrito(carritoId);
+        Carrito carrito = carritoService.vaciarCarrito(carritoId, false);
         CarritoDTO carritoDTO = dtoConverter.convertToCarritoDTO(carrito);
         return ResponseEntity.ok(carritoDTO);
     }

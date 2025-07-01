@@ -30,7 +30,7 @@ import java.util.UUID;
  */
 @Service
 public class OrdenService {
-    
+
     // Logger para registros
     private static final Logger logger = LoggerFactory.getLogger(OrdenService.class);
 
@@ -38,7 +38,7 @@ public class OrdenService {
     private static final String ESTADO_PENDIENTE_NOMBRE = "PENDIENTE";
     private static final String ESTADO_PENDIENTE_CODIGO = "1 PENDING";
     private static final String ESTADO_PENDIENTE_DESCRIPCION = "La orden está pendiente de pago";
-    
+
     // EntityManager para acceso a JDBC directo
     @PersistenceContext
     private EntityManager entityManager;
@@ -58,7 +58,7 @@ public class OrdenService {
     private final ThumbnailItemRepository thumbnailItemRepository;
     private final TipoAnguloRepository tipoAnguloRepository;
     private final CloudinaryResourceRepository cloudinaryResourceRepository;
-    
+
     /**
      * Constructor con inyección de dependencias.
      */
@@ -105,7 +105,15 @@ public class OrdenService {
     @Transactional(readOnly = true)
     public List<OrdenDTO> obtenerOrdenesPorUsuario(Long usuarioId) {
         List<Orden> ordenes = ordenRepository.findByUsuarioIdOrderByCreadoEnDesc(usuarioId);
-        
+
+        // Cargar thumbnails explícitamente (LAZY loading)
+        for (Orden orden : ordenes) {
+            for (ItemOrden item : orden.getItems()) {
+                // Forzar carga de thumbnails
+                item.getThumbnails().size();
+            }
+        }
+
         return ordenes.stream()
                 .map(this::convertirAOrdenDTO)
                 .toList();
@@ -127,10 +135,11 @@ public class OrdenService {
 
     /**
      * Migra los thumbnails desde los ítems del carrito a los ítems de la orden.
-     * En lugar de eliminar y recrear thumbnails, simplemente actualiza las referencias.
+     * En lugar de eliminar y recrear thumbnails, simplemente actualiza las
+     * referencias.
      * 
      * @param itemsCarrito Lista de ítems del carrito
-     * @param itemsOrden Lista de ítems de la orden
+     * @param itemsOrden   Lista de ítems de la orden
      */
     @Transactional(propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW)
     protected void migrarThumbnails(List<ItemCarrito> itemsCarrito, List<ItemOrden> itemsOrden) {
@@ -140,140 +149,150 @@ public class OrdenService {
             String clave = generarClaveItem(itemOrden);
             mapaItemsOrden.put(clave, itemOrden);
         }
-        
+
         // Procesar cada ítem del carrito
         for (ItemCarrito itemCarrito : itemsCarrito) {
             String claveItemCarrito = generarClaveItem(itemCarrito);
             ItemOrden itemOrdenCorrespondiente = mapaItemsOrden.get(claveItemCarrito);
-            if (itemOrdenCorrespondiente == null) continue; // No se encontró un ítem de orden correspondiente
-            
+            if (itemOrdenCorrespondiente == null)
+                continue; // No se encontró un ítem de orden correspondiente
+
             // Migrar los thumbnails del ítem del carrito al ítem de orden correspondiente
             migrarThumbnailsParaItem(itemCarrito.getId(), itemOrdenCorrespondiente);
         }
-        
-        // Importante: Refrescar cada ítem de orden para cargar sus thumbnails después de la migración
-        for (ItemOrden item : itemsOrden) {
-            entityManager.refresh(item);
-            logger.info("ItemOrden {} refrescado, tiene {} thumbnails", item.getId(), 
-                    item.getThumbnails() != null ? item.getThumbnails().size() : 0);
-        }
+
+        // Importante: Refrescar cada ítem de orden para cargar sus thumbnails después
+        // de la migración
+        // Solo flush sin refresh
+        entityManager.flush();
+        logger.info("Migración de thumbnails completada para {} items", itemsOrden.size());
     }
-    
+
     /**
      * Migra los thumbnails de un ítem de carrito específico a un ítem de orden
-     * creando nuevos objetos ThumbnailItem para evitar problemas de entidades transitorias.
+     * creando nuevos objetos ThumbnailItem para evitar problemas de entidades
+     * transitorias.
      * 
      * @param itemCarritoId ID del ítem del carrito
-     * @param itemOrden Ítem de orden al que migrar los thumbnails
+     * @param itemOrden     Ítem de orden al que migrar los thumbnails
      */
     @Transactional(propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW)
     protected void migrarThumbnailsParaItem(Long itemCarritoId, ItemOrden itemOrden) {
         try {
-            // Asegurarnos que tenemos el ItemOrden completamente inicializado y gestionado por JPA
-            ItemOrden itemOrdenGestionado = entityManager.find(ItemOrden.class, itemOrden.getId());
-            if (itemOrdenGestionado == null) {
-                logger.error("No se encontró el ítem de orden con ID {} en la base de datos", itemOrden.getId());
-                return;
+            logger.debug("=== INICIO MIGRACIÓN ===");
+            logger.debug("ItemCarrito ID: {}", itemCarritoId);
+            logger.debug("ItemOrden ID RECIBIDO: {}", itemOrden.getId());
+
+            // ASEGURAR que itemOrden esté persistido
+            if (itemOrden.getId() == null) {
+                logger.debug("ItemOrden no tiene ID, persistiendo...");
+                entityManager.persist(itemOrden);
+                entityManager.flush();
+                logger.debug("ItemOrden persistido con ID: {}", itemOrden.getId());
             }
-            
-            logger.debug("Buscando thumbnails para el ítem de carrito ID={}", itemCarritoId);
-            
-            // Recuperar todos los thumbnails asociados al ítem del carrito
+
+            // RECUPERAR entidad gestionada
+            ItemOrden itemOrdenGestionado = entityManager.find(ItemOrden.class, itemOrden.getId());
+            logger.debug("ItemOrden gestionado ID: {}", itemOrdenGestionado.getId());
+
             List<ThumbnailItem> thumbnailsCarrito = entityManager.createQuery(
-                    "SELECT t FROM ThumbnailItem t WHERE t.itemCarritoId = :itemCarritoId", 
+                    "SELECT t FROM ThumbnailItem t WHERE t.itemCarritoId = :itemCarritoId",
                     ThumbnailItem.class)
                     .setParameter("itemCarritoId", itemCarritoId)
                     .getResultList();
-            
-            logger.info("Encontrados {} thumbnails para el ítem de carrito {}", thumbnailsCarrito.size(), itemCarritoId);
-            
-            // Para cada thumbnail del carrito, crear uno nuevo para el ítem de la orden
-            int contador = 0;
+
+            logger.info("Encontrados {} thumbnails para migrar", thumbnailsCarrito.size());
+
             for (ThumbnailItem thumbCarrito : thumbnailsCarrito) {
-                // Crear un nuevo ThumbnailItem para el ítem de la orden
+                logger.debug("--- Procesando thumbnail ---");
+                logger.debug("Thumbnail original - ID: {}, itemCarritoId: {}, itemOrdenId: {}",
+                        thumbCarrito.getId(), thumbCarrito.getItemCarritoId(), thumbCarrito.getItemOrdenId());
+
                 ThumbnailItem nuevoThumb = new ThumbnailItem();
-                
-                // Establecer el ítem de orden (desvinculado del ítem de carrito)
+
+                // ESTABLECER las relaciones
                 nuevoThumb.setItemOrden(itemOrdenGestionado);
-                nuevoThumb.setItemCarrito(null); // Explícitamente NULL para evitar problemas
-                
-                // Copiar el mismo tipo de ángulo
+                nuevoThumb.setItemCarrito(null);
                 nuevoThumb.setTipoAngulo(thumbCarrito.getTipoAngulo());
-                
-                // Reutilizar el mismo cloudinary resource (no duplicamos la imagen)
                 nuevoThumb.setCloudinaryResource(thumbCarrito.getCloudinaryResource());
-                
-                // Guardar el nuevo thumbnail
+
+                // VERIFICAR valores antes de persistir
+                logger.debug("Nuevo thumbnail - itemOrden: {}, itemCarrito: {}",
+                        nuevoThumb.getItemOrden() != null ? nuevoThumb.getItemOrden().getId() : "NULL",
+                        nuevoThumb.getItemCarrito());
+                logger.debug("TipoAngulo: {}, CloudinaryResource: {}",
+                        nuevoThumb.getTipoAngulo() != null ? nuevoThumb.getTipoAngulo().getId() : "NULL",
+                        nuevoThumb.getCloudinaryResource() != null ? nuevoThumb.getCloudinaryResource().getId()
+                                : "NULL");
+
                 entityManager.persist(nuevoThumb);
-                contador++;
+                entityManager.flush();
+
+                logger.debug("Thumbnail creado exitosamente con ID: {}", nuevoThumb.getId());
             }
-            
-            // Forzar la sincronización con la base de datos
-            entityManager.flush();
-            
-            logger.info("Creados {} nuevos thumbnails para el ítem de orden {} a partir del ítem de carrito {}", 
-                    contador, itemOrdenGestionado.getId(), itemCarritoId);
-            
+
+            logger.info("=== MIGRACIÓN COMPLETADA ===");
+
         } catch (Exception e) {
-            logger.error("Error al migrar thumbnails del ítem de carrito {} al ítem de orden {}: {}", 
-                    itemCarritoId, itemOrden.getId(), e.getMessage(), e);
-            // Propagamos la excepción para que Spring pueda manejar el rollback apropiadamente
+            logger.error("=== ERROR EN MIGRACIÓN ===");
+            logger.error("Error: {}", e.getMessage(), e);
             throw new RuntimeException("Error al migrar thumbnails: " + e.getMessage(), e);
         }
     }
-    
+
     /**
      * Genera una clave única para identificar ítems basándose en su contenido.
-     * Esta clave se usa para relacionar los ítems de carrito con sus correspondientes ítems de orden.
+     * Esta clave se usa para relacionar los ítems de carrito con sus
+     * correspondientes ítems de orden.
      * 
      * @param item Puede ser un ItemCarrito o un ItemOrden
      * @return Clave única que identifica el ítem
      */
     private String generarClaveItem(Object item) {
         StringBuilder clave = new StringBuilder();
-        
+
         if (item instanceof ItemCarrito) {
             ItemCarrito itemCarrito = (ItemCarrito) item;
-            
+
             // Identificar por producto o diseño personalizado
             if (itemCarrito.getProducto() != null) {
                 clave.append("P").append(itemCarrito.getProducto().getId());
             } else if (itemCarrito.getDisenoPersonalizado() != null) {
                 clave.append("D").append(itemCarrito.getDisenoPersonalizado().getId());
             }
-            
+
             // Añadir color y talla si existen
             if (itemCarrito.getColor() != null) {
                 clave.append("_C").append(itemCarrito.getColor().getId());
             }
-            
+
             if (itemCarrito.getTalla() != null) {
                 clave.append("_T").append(itemCarrito.getTalla().getId());
             }
-            
+
         } else if (item instanceof ItemOrden) {
             ItemOrden itemOrden = (ItemOrden) item;
-            
+
             // Identificar por producto o diseño personalizado
             if (itemOrden.getProducto() != null) {
                 clave.append("P").append(itemOrden.getProducto().getId());
             } else if (itemOrden.getDisenoPersonalizado() != null) {
                 clave.append("D").append(itemOrden.getDisenoPersonalizado().getId());
             }
-            
+
             // Añadir color y talla si existen
             if (itemOrden.getColor() != null) {
                 clave.append("_C").append(itemOrden.getColor().getId());
             }
-            
+
             if (itemOrden.getTalla() != null) {
                 clave.append("_T").append(itemOrden.getTalla().getId());
             }
         }
-        
+
         return clave.toString();
     }
-    
+
     /**
      * Obtiene una orden por su ID.
      * 
@@ -285,7 +304,7 @@ public class OrdenService {
     public OrdenDTO obtenerOrdenPorId(Long ordenId) {
         Orden orden = ordenRepository.findById(ordenId)
                 .orElseThrow(() -> new ResourceNotFoundException("Orden no encontrada con ID: " + ordenId));
-        
+
         return convertirAOrdenDTO(orden);
     }
 
@@ -299,46 +318,48 @@ public class OrdenService {
     public OrdenDTO crearOrden(CrearOrdenDTO crearOrdenDTO) {
         // Obtener entidades necesarias
         Usuario usuario = usuarioRepository.findById(crearOrdenDTO.getUsuarioId())
-                .orElseThrow(() -> new ResourceNotFoundException("Usuario no encontrado con ID: " + crearOrdenDTO.getUsuarioId()));
-        
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Usuario no encontrado con ID: " + crearOrdenDTO.getUsuarioId()));
+
         Carrito carrito = carritoService.obtenerCarritoPorId(crearOrdenDTO.getCarritoId());
-        
+
         if (carrito.getItems().isEmpty()) {
             throw new IllegalStateException("No se puede crear una orden con un carrito vacío");
         }
-        
-        // Obtener o crear el estado inicial de orden (por ejemplo, "Pendiente" o "Recibida")
+
+        // Obtener o crear el estado inicial de orden (por ejemplo, "Pendiente" o
+        // "Recibida")
         EstadoOrden estadoInicial = estadoOrdenRepository.findByNombre(ESTADO_PENDIENTE_NOMBRE);
         if (estadoInicial == null) {
             // Si no existe, crear el estado
             estadoInicial = new EstadoOrden();
-            estadoInicial.setCodigo(ESTADO_PENDIENTE_CODIGO);  // Establecer el código según la tabla
+            estadoInicial.setCodigo(ESTADO_PENDIENTE_CODIGO); // Establecer el código según la tabla
             estadoInicial.setNombre(ESTADO_PENDIENTE_NOMBRE);
             estadoInicial.setDescripcion(ESTADO_PENDIENTE_DESCRIPCION);
             estadoInicial = estadoOrdenRepository.save(estadoInicial);
         }
-        
+
         // Crear la orden
         Orden nuevaOrden = new Orden();
         nuevaOrden.setUsuario(usuario);
         nuevaOrden.setEstado(estadoInicial);
-            // La creación de fechas se maneja automáticamente por @PrePersist
-            // Generar código de seguimiento único
+        // La creación de fechas se maneja automáticamente por @PrePersist
+        // Generar código de seguimiento único
         nuevaOrden.setCodigoSeguimiento("ORD-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase());
-        
+
         // Inicializar el precio total en cero (se actualizará después)
         nuevaOrden.setPrecioTotal(BigDecimal.ZERO);
-        
+
         // Guardar la orden para obtener su ID
         nuevaOrden = ordenRepository.save(nuevaOrden);
-        
+
         // Convertir ítems del carrito a ítems de orden
         BigDecimal totalOrden = BigDecimal.ZERO;
-        
+
         for (ItemCarrito itemCarrito : carrito.getItems()) {
             ItemOrden itemOrden = new ItemOrden();
             itemOrden.setOrden(nuevaOrden);
-            
+
             // Establecer el producto o diseño personalizado
             if (itemCarrito.getProducto() != null) {
                 itemOrden.setProducto(itemCarrito.getProducto());
@@ -347,50 +368,51 @@ public class OrdenService {
                 itemOrden.setDisenoPersonalizado(itemCarrito.getDisenoPersonalizado());
                 itemOrden.setNombre("Diseño personalizado: " + itemCarrito.getDisenoPersonalizado().getDetalle());
             }
-            
+
             // Establecer los detalles del ítem
             itemOrden.setCantidad(itemCarrito.getCantidad());
             itemOrden.setPrecioUnitario(itemCarrito.getPrecioUnitario());
-            
-            // El cálculo del precio total se hace automáticamente en el método calcularPrecioTotal() de ItemOrden
-            
+
+            // El cálculo del precio total se hace automáticamente en el método
+            // calcularPrecioTotal() de ItemOrden
+
             // Establecer color y talla
             if (itemCarrito.getColor() != null) {
                 itemOrden.setColor(itemCarrito.getColor());
                 itemOrden.setColorId(itemCarrito.getColorId());
             }
-            
+
             if (itemCarrito.getTalla() != null) {
                 itemOrden.setTalla(itemCarrito.getTalla());
                 itemOrden.setTallaId(itemCarrito.getTallaId());
             }
-            
+
             // Establecer tipo de ítem (relación completa en lugar de solo ID)
             itemOrden.setTipoItem(itemCarrito.getTipoItem());
-            
+
             // Agregar a la lista de ítems de la orden
             nuevaOrden.addItem(itemOrden);
-            
+
             // Calcular subtotal para acumular el total de la orden
             BigDecimal subtotal = itemOrden.getPrecioUnitario().multiply(BigDecimal.valueOf(itemOrden.getCantidad()));
             totalOrden = totalOrden.add(subtotal);
         }
-        
+
         // Actualizar el precio total de la orden
         nuevaOrden.setPrecioTotal(totalOrden);
-        
+
         // Guardar la orden actualizada con sus ítems y total
         nuevaOrden = ordenRepository.save(nuevaOrden);
-        
+
         // Crear registro en el historial de estados
         HistorialEstadosOrden historialEstado = new HistorialEstadosOrden();
         historialEstado.setEstado(estadoInicial);
         historialEstado.setOrden(nuevaOrden);
         nuevaOrden.addHistorialEstado(historialEstado);
-        
+
         // Guardar la orden con el historial
         nuevaOrden = ordenRepository.save(nuevaOrden);
-        
+
         // Crear y guardar información de envío
         InfoEnvio infoEnvio = new InfoEnvio();
         infoEnvio.setOrden(nuevaOrden);
@@ -401,10 +423,10 @@ public class OrdenService {
         infoEnvio.setCiudad(crearOrdenDTO.getInfoEnvio().getCiudad());
         infoEnvio.setEstado(crearOrdenDTO.getInfoEnvio().getEstado());
         infoEnvio.setCodigoPostal(crearOrdenDTO.getInfoEnvio().getCodigoPostal());
-        infoEnvio.setPais(crearOrdenDTO.getInfoEnvio().getPais() != null ? 
-                crearOrdenDTO.getInfoEnvio().getPais() : "Chile");
+        infoEnvio.setPais(
+                crearOrdenDTO.getInfoEnvio().getPais() != null ? crearOrdenDTO.getInfoEnvio().getPais() : "Chile");
         infoEnvioRepository.save(infoEnvio);
-        
+
         // Crear y guardar información de pago
         InfoPago infoPago = new InfoPago();
         infoPago.setOrden(nuevaOrden);
@@ -413,13 +435,14 @@ public class OrdenService {
         infoPago.setUltimosDigitos(crearOrdenDTO.getInfoPago().getUltimosDigitos());
         infoPago.setIdTransaccion(crearOrdenDTO.getInfoPago().getIdTransaccion());
         infoPagoRepository.save(infoPago);
-        
-        // Migrar los thumbnails de los items del carrito a los items de la orden antes de vaciar el carrito
+
+        // Migrar los thumbnails de los items del carrito a los items de la orden antes
+        // de vaciar el carrito
         migrarThumbnails(carrito.getItems(), nuevaOrden.getItems());
-        
+
         // Vaciar el carrito después de crear la orden
-        carritoService.vaciarCarrito(carrito.getId());
-        
+        carritoService.vaciarCarrito(carrito.getId(), true);
+
         // Convertir y retornar la orden como DTO
         return convertirAOrdenDTO(nuevaOrden);
     }
@@ -427,7 +450,7 @@ public class OrdenService {
     /**
      * Actualiza el estado de una orden.
      * 
-     * @param ordenId ID de la orden
+     * @param ordenId  ID de la orden
      * @param estadoId ID del nuevo estado
      * @return DTO de la orden actualizada
      */
@@ -435,21 +458,20 @@ public class OrdenService {
     public OrdenDTO actualizarEstadoOrden(Long ordenId, Long estadoId) {
         Orden orden = ordenRepository.findById(ordenId)
                 .orElseThrow(() -> new ResourceNotFoundException("Orden no encontrada con ID: " + ordenId));
-        
+
         EstadoOrden nuevoEstado = estadoOrdenRepository.findById(estadoId)
                 .orElseThrow(() -> new ResourceNotFoundException("Estado no encontrado con ID: " + estadoId));
-        
+
         // Registrar el cambio de estado en el historial
         HistorialEstadosOrden historialEstado = new HistorialEstadosOrden();
         historialEstado.setEstado(nuevoEstado);
         historialEstado.setOrden(orden);
         // La fecha se establecerá automáticamente en el onCreate() del modelo
         orden.addHistorialEstado(historialEstado);
-        
+
         // Actualizar el estado actual de la orden
         orden.setEstado(nuevoEstado);
         orden = ordenRepository.save(orden);
-        
         return convertirAOrdenDTO(orden);
     }
 
@@ -461,44 +483,52 @@ public class OrdenService {
      */
     private OrdenDTO convertirAOrdenDTO(Orden orden) {
         OrdenDTO dto = new OrdenDTO();
-        
+
         dto.setId(orden.getId());
-    
-    // Manejar orden anónima (usuario puede ser nulo)
-    if (orden.getUsuario() != null) {
-        dto.setUsuarioId(orden.getUsuario().getId());
-        dto.setNombreUsuario(orden.getUsuario().getNombre());
-    } else {
-        // Para órdenes anónimas
-        dto.setUsuarioId(null);
-        dto.setNombreUsuario("Cliente Anónimo");
-    }
-    
-    dto.setCreadaEn(orden.getCreadoEn());
-    dto.setTotal(orden.getPrecioTotal());
-    dto.setEstado(orden.getEstado() != null ? orden.getEstado().getNombre() : "");
-        
+
+        // Manejar orden anónima (usuario puede ser nulo)
+        if (orden.getUsuario() != null) {
+            dto.setUsuarioId(orden.getUsuario().getId());
+            dto.setNombreUsuario(orden.getUsuario().getNombre());
+        } else {
+            // Para órdenes anónimas
+            dto.setUsuarioId(null);
+            dto.setNombreUsuario("Cliente Anónimo");
+        }
+
+        dto.setCreadaEn(orden.getCreadoEn());
+        dto.setTotal(orden.getPrecioTotal());
+        dto.setEstado(orden.getEstado() != null ? orden.getEstado().getNombre() : "");
+
         // Información adicional de envío y pago si está disponible
         if (orden.getInfoEnvio() != null) {
+            // Mantener el campo string para compatibilidad
             dto.setDireccionEntrega(orden.getInfoEnvio().getDireccion());
+            // Agregar el objeto InfoEnvioDTO completo
+            dto.setInfoEnvio(dtoConverterService.convertToInfoEnvioDTO(orden.getInfoEnvio()));
         } else {
             dto.setDireccionEntrega("");
+            dto.setInfoEnvio(null);
         }
-        
+
         if (orden.getInfoPago() != null) {
-            // Usar ID del método de pago como texto provisional
+            // Mantener el campo string para compatibilidad
             dto.setMetodoPago("Método de pago ID: " + orden.getInfoPago().getMetodoPagoId());
+            // Agregar el objeto InfoPagoDTO completo
+            dto.setInfoPago(dtoConverterService.convertToInfoPagoDTO(orden.getInfoPago()));
         } else {
             dto.setMetodoPago("");
+            dto.setInfoPago(null);
         }
-        
-        // Convertir ítems usando el servicio DTOConverter para incluir objetos completos
+
+        // Convertir ítems usando el servicio DTOConverter para incluir objetos
+        // completos
         List<ItemOrdenDTO> itemsDTO = orden.getItems().stream()
                 .map(dtoConverterService::convertToItemOrdenDTO)
                 .toList();
-        
+
         dto.setItems(itemsDTO);
-        
+
         return dto;
     }
 
@@ -515,18 +545,19 @@ public class OrdenService {
         if (estadoCancelado == null) {
             throw new ResourceNotFoundException("Estado CANCELED no encontrado en la base de datos");
         }
-        
+
         // No usar this para evitar proxy bypass en métodos transaccionales
         return actualizarEstadoOrden(ordenId, estadoCancelado.getId());
     }
-    
+
     /**
      * Crea una nueva orden para un cliente sin cuenta de usuario (anónimo).
      * El carrito está en memoria del cliente, no en la base de datos.
      * 
      * @param crearOrdenAnonimaDTO DTO con datos para crear la orden anónima
      * @return DTO de la orden creada
-     * @throws ResourceNotFoundException Si el estado inicial u objetos necesarios no existen
+     * @throws ResourceNotFoundException Si el estado inicial u objetos necesarios
+     *                                   no existen
      */
     @Transactional
     public OrdenDTO crearOrdenAnonima(CrearOrdenAnonimaDTO crearOrdenAnonimaDTO) {
@@ -534,38 +565,38 @@ public class OrdenService {
         if (crearOrdenAnonimaDTO.getItems() == null || crearOrdenAnonimaDTO.getItems().isEmpty()) {
             throw new IllegalArgumentException("El carrito no puede estar vacío");
         }
-        
+
         // Buscar estado inicial para la orden (generalmente "PENDIENTE")
         EstadoOrden estadoInicial = estadoOrdenRepository.findByNombre(ESTADO_PENDIENTE_NOMBRE);
         if (estadoInicial == null) {
             // Si no existe, crear el estado
             estadoInicial = new EstadoOrden();
-            estadoInicial.setCodigo(ESTADO_PENDIENTE_CODIGO);  // Establecer el código según la tabla
+            estadoInicial.setCodigo(ESTADO_PENDIENTE_CODIGO); // Establecer el código según la tabla
             estadoInicial.setNombre(ESTADO_PENDIENTE_NOMBRE);
             estadoInicial.setDescripcion(ESTADO_PENDIENTE_DESCRIPCION);
             estadoInicial = estadoOrdenRepository.save(estadoInicial);
         }
-        
+
         // Crear una nueva orden
         Orden nuevaOrden = new Orden();
         // No asignamos usuario ya que es una orden anónima
         nuevaOrden.setEstado(estadoInicial);
         nuevaOrden.setCodigoSeguimiento("ORD-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase());
-        
+
         // Inicializar el precio total en cero (se actualizará después)
         nuevaOrden.setPrecioTotal(BigDecimal.ZERO);
-        
+
         // Guardar la orden para obtener su ID
         nuevaOrden = ordenRepository.save(nuevaOrden);
-        
+
         // Inicializar total de la orden
         BigDecimal totalOrden = BigDecimal.ZERO;
-        
+
         // Agregar los ítems del carrito en memoria a la orden
         for (ItemCarritoMemoriaDTO itemMemoria : crearOrdenAnonimaDTO.getItems()) {
             ItemOrden itemOrden = new ItemOrden();
             itemOrden.setOrden(nuevaOrden);
-            
+
             // Establecer el nombre, usando un valor por defecto si es necesario
             if (itemMemoria.getNombre() != null) {
                 itemOrden.setNombre(itemMemoria.getNombre());
@@ -576,14 +607,16 @@ public class OrdenService {
             } else {
                 itemOrden.setNombre("Ítem sin nombre");
             }
-            
+
             // Establecer la cantidad, usando 1 por defecto si es null
             itemOrden.setCantidad(itemMemoria.getCantidad() != null ? itemMemoria.getCantidad() : 1);
-            
-            // Establecer el tipo de ítem (entidad completa), usando un valor por defecto si es null
+
+            // Establecer el tipo de ítem (entidad completa), usando un valor por defecto si
+            // es null
             Long tipoItemId = itemMemoria.getTipoItemId();
             if (tipoItemId == null) {
-                // Si estamos trabajando con un diseño personalizado, usar tipo 2 (personalizado)
+                // Si estamos trabajando con un diseño personalizado, usar tipo 2
+                // (personalizado)
                 // Si es un producto estándar, usar tipo 1 (estándar)
                 if (itemMemoria.getDisenoPersonalizadoId() != null) {
                     tipoItemId = 2L; // Tipo para diseño personalizado
@@ -592,10 +625,11 @@ public class OrdenService {
                 }
                 System.out.println("Asignando tipoItemId por defecto: " + tipoItemId);
             }
-            
-            // La comprobación de null se eliminó porque tipoItemId nunca puede ser null en este punto
+
+            // La comprobación de null se eliminó porque tipoItemId nunca puede ser null en
+            // este punto
             // debido a la asignación en el bloque if-else anterior
-            
+
             // IMPORTANTE: Buscar y establecer la entidad TipoItem completa (no solo el ID)
             final Long finalTipoItemId = tipoItemId; // Capturar el valor en una variable final para la lambda
             try {
@@ -618,40 +652,44 @@ public class OrdenService {
                     }
                 }
             }
-            
-            // Variable para almacenar el precio, se inicializa con el valor del DTO (si existe)
+
+            // Variable para almacenar el precio, se inicializa con el valor del DTO (si
+            // existe)
             BigDecimal precioUnitario = itemMemoria.getPrecioUnitario();
-            
+
             // Asignar producto si existe
             if (itemMemoria.getProductoId() != null) {
                 Producto producto = productoRepository.findById(itemMemoria.getProductoId())
                         .orElseThrow(() -> new ResourceNotFoundException(
                                 "Producto no encontrado con ID: " + itemMemoria.getProductoId()));
                 itemOrden.setProducto(producto);
-                
+
                 // Si no hay precio unitario en el DTO, usamos uno por defecto
                 if (precioUnitario == null) {
                     // Precio por defecto para productos
-                    precioUnitario = new BigDecimal("29.99");
+                    precioUnitario = producto.getDisenoPersonalizado().getPrecio();
                 }
             }
-            
+
             // Asignar diseño personalizado si existe
             if (itemMemoria.getDisenoPersonalizadoId() != null) {
-                DisenoPersonalizado diseno = disenoPersonalizadoRepository.findById(itemMemoria.getDisenoPersonalizadoId())
+                DisenoPersonalizado diseno = disenoPersonalizadoRepository
+                        .findById(itemMemoria.getDisenoPersonalizadoId())
                         .orElseThrow(() -> new ResourceNotFoundException(
-                                "Diseño personalizado no encontrado con ID: " + itemMemoria.getDisenoPersonalizadoId()));
+                                "Diseño personalizado no encontrado con ID: "
+                                        + itemMemoria.getDisenoPersonalizadoId()));
                 itemOrden.setDisenoPersonalizado(diseno);
-                
+
                 // Obtener precio automáticamente del diseño personalizado
                 precioUnitario = diseno.getPrecio();
             }
-            
-            // Asignar color si existe - ahora usando directamente el ID o nombre como string
+
+            // Asignar color si existe - ahora usando directamente el ID o nombre como
+            // string
             if (itemMemoria.getColorId() != null) {
                 // En ItemOrden solo guardar la referencia al colorId como string
                 itemOrden.setColorId(itemMemoria.getColorId());
-                
+
                 // Intentar buscar el color pero si no se encuentra, no es crítico
                 try {
                     Color color = colorRepository.findById(itemMemoria.getColorId()).orElse(null);
@@ -663,12 +701,13 @@ public class OrdenService {
                     System.out.println("No se encontró el color con ID: " + itemMemoria.getColorId());
                 }
             }
-            
-            // Asignar talla si existe - ahora usando directamente el ID o nombre como string
+
+            // Asignar talla si existe - ahora usando directamente el ID o nombre como
+            // string
             if (itemMemoria.getTallaId() != null) {
                 // En ItemOrden solo guardar la referencia al tallaId como string
                 itemOrden.setTallaId(itemMemoria.getTallaId());
-                
+
                 // Intentar buscar la talla pero si no se encuentra, no es crítico
                 try {
                     Talla talla = tallaRepository.findById(itemMemoria.getTallaId()).orElse(null);
@@ -680,17 +719,18 @@ public class OrdenService {
                     System.out.println("No se encontró la talla con ID: " + itemMemoria.getTallaId());
                 }
             }
-            
+
             // Asegurar que tengamos un precio unitario válido
             if (precioUnitario == null) {
                 // Usar precio por defecto como medida de seguridad final
                 precioUnitario = new BigDecimal("19.99");
-                System.out.println("Advertencia: Usando precio por defecto para ítem sin precio: " + itemOrden.getNombre());
+                System.out.println(
+                        "Advertencia: Usando precio por defecto para ítem sin precio: " + itemOrden.getNombre());
             }
-            
+
             // Establecer el precio unitario calculado/obtenido
             itemOrden.setPrecioUnitario(precioUnitario);
-            
+
             // Verificar que el tipoItem esté establecido antes de agregar a la orden
             if (itemOrden.getTipoItem() == null) {
                 System.out.println("ERROR CRÍTICO: tipoItem sigue siendo nulo antes de agregar el ítem a la orden");
@@ -707,39 +747,40 @@ public class OrdenService {
             } else {
                 System.out.println("tipoItem correctamente establecido: " + itemOrden.getTipoItem().getId());
             }
-            
+
             // Establecer el precio total del ítem
-            int cantidad = (itemMemoria.getCantidad() != null && itemMemoria.getCantidad() > 0) ? 
-                    itemMemoria.getCantidad() : 1;
+            int cantidad = (itemMemoria.getCantidad() != null && itemMemoria.getCantidad() > 0)
+                    ? itemMemoria.getCantidad()
+                    : 1;
             BigDecimal subtotal = precioUnitario.multiply(BigDecimal.valueOf(cantidad));
             itemOrden.setPrecioTotal(subtotal);
-            
+
             // Agregar a la lista de ítems de la orden
             nuevaOrden.addItem(itemOrden);
-            
+
             // Acumular el total de la orden
             totalOrden = totalOrden.add(subtotal);
         }
-        
+
         // Actualizar el precio total de la orden
         nuevaOrden.setPrecioTotal(totalOrden);
-        
+
         // Guardar la orden actualizada con sus ítems y total
         nuevaOrden = ordenRepository.save(nuevaOrden);
-        
+
         // Crear registro en el historial de estados
         HistorialEstadosOrden historialEstado = new HistorialEstadosOrden();
         historialEstado.setEstado(estadoInicial);
         historialEstado.setOrden(nuevaOrden);
         nuevaOrden.addHistorialEstado(historialEstado);
-        
+
         // Guardar la orden con el historial
         nuevaOrden = ordenRepository.save(nuevaOrden);
-        
+
         // Crear y guardar información de envío
         InfoEnvio infoEnvio = new InfoEnvio();
         infoEnvio.setOrden(nuevaOrden);
-        
+
         // Validar que la información de envío no sea nula
         if (crearOrdenAnonimaDTO.getInfoEnvio() == null) {
             System.out.println("ERROR: La información de envío es nula, creando información por defecto");
@@ -755,57 +796,54 @@ public class OrdenService {
         } else {
             // Asignar los valores del DTO, con validaciones para campos requeridos
             // El nombre completo es obligatorio
-            // NOTA: En el DTO InfoEnvioDTO es nombreCompleto pero en el JSON de entrada es nombre
-            String nombreCompleto = crearOrdenAnonimaDTO.getInfoEnvio().getNombre(); // Usamos getNombre() en lugar de getNombreCompleto()
-            infoEnvio.setNombreCompleto(nombreCompleto != null && !nombreCompleto.trim().isEmpty() ? 
-                    nombreCompleto : "Cliente Anónimo");
-            
+            // NOTA: En el DTO InfoEnvioDTO es nombreCompleto pero en el JSON de entrada es
+            // nombre
+            String nombreCompleto = crearOrdenAnonimaDTO.getInfoEnvio().getNombre(); // Usamos getNombre() en lugar de
+                                                                                     // getNombreCompleto()
+            infoEnvio.setNombreCompleto(
+                    nombreCompleto != null && !nombreCompleto.trim().isEmpty() ? nombreCompleto : "Cliente Anónimo");
+
             // Teléfono
             String telefono = crearOrdenAnonimaDTO.getInfoEnvio().getTelefono();
-            infoEnvio.setTelefono(telefono != null && !telefono.trim().isEmpty() ? 
-                    telefono : "+56 9 0000 0000");
-            
+            infoEnvio.setTelefono(telefono != null && !telefono.trim().isEmpty() ? telefono : "+56 9 0000 0000");
+
             // Email
             String email = crearOrdenAnonimaDTO.getInfoEnvio().getEmail();
-            infoEnvio.setEmail(email != null && !email.trim().isEmpty() ? 
-                    email : "cliente@anonimo.com");
-            
+            infoEnvio.setEmail(email != null && !email.trim().isEmpty() ? email : "cliente@anonimo.com");
+
             // Dirección
             String direccion = crearOrdenAnonimaDTO.getInfoEnvio().getDireccion();
-            infoEnvio.setDireccion(direccion != null && !direccion.trim().isEmpty() ? 
-                    direccion : "Dirección no especificada");
-            
+            infoEnvio.setDireccion(
+                    direccion != null && !direccion.trim().isEmpty() ? direccion : "Dirección no especificada");
+
             // Ciudad
             String ciudad = crearOrdenAnonimaDTO.getInfoEnvio().getCiudad();
-            infoEnvio.setCiudad(ciudad != null && !ciudad.trim().isEmpty() ? 
-                    ciudad : "Santiago");
-            
+            infoEnvio.setCiudad(ciudad != null && !ciudad.trim().isEmpty() ? ciudad : "Santiago");
+
             // Estado/Región
             String estado = crearOrdenAnonimaDTO.getInfoEnvio().getEstado();
-            infoEnvio.setEstado(estado != null && !estado.trim().isEmpty() ? 
-                    estado : "Región Metropolitana");
-            
+            infoEnvio.setEstado(estado != null && !estado.trim().isEmpty() ? estado : "Región Metropolitana");
+
             // Código postal
             String codigoPostal = crearOrdenAnonimaDTO.getInfoEnvio().getCodigoPostal();
-            infoEnvio.setCodigoPostal(codigoPostal != null && !codigoPostal.trim().isEmpty() ? 
-                    codigoPostal : "0000000");
-            
+            infoEnvio
+                    .setCodigoPostal(codigoPostal != null && !codigoPostal.trim().isEmpty() ? codigoPostal : "0000000");
+
             // País (con valor por defecto "Chile")
             String pais = crearOrdenAnonimaDTO.getInfoEnvio().getPais();
-            infoEnvio.setPais(pais != null && !pais.trim().isEmpty() ? 
-                    pais : "Chile");
+            infoEnvio.setPais(pais != null && !pais.trim().isEmpty() ? pais : "Chile");
         }
-        
+
         // Verificar que los campos obligatorios no sean nulos antes de guardar
-        System.out.println("Verificando información de envío antes de guardar: nombreCompleto=" + 
+        System.out.println("Verificando información de envío antes de guardar: nombreCompleto=" +
                 infoEnvio.getNombreCompleto());
-        
+
         infoEnvioRepository.save(infoEnvio);
-        
+
         // Crear y guardar información de pago
         InfoPago infoPago = new InfoPago();
         infoPago.setOrden(nuevaOrden);
-        
+
         // Validar que la información de pago no sea nula
         if (crearOrdenAnonimaDTO.getInfoPago() == null) {
             System.out.println("ERROR: La información de pago es nula, creando información por defecto");
@@ -818,29 +856,29 @@ public class OrdenService {
             // Método de pago (valor por defecto 1)
             Long metodoPagoId = crearOrdenAnonimaDTO.getInfoPago().getMetodoPagoId();
             infoPago.setMetodoPagoId(metodoPagoId != null ? metodoPagoId : 1L);
-            
+
             // Titular de tarjeta
             String titularTarjeta = crearOrdenAnonimaDTO.getInfoPago().getTitularTarjeta();
-            infoPago.setTitularTarjeta(titularTarjeta != null && !titularTarjeta.trim().isEmpty() ? 
-                    titularTarjeta : "Cliente Anónimo");
-            
+            infoPago.setTitularTarjeta(
+                    titularTarjeta != null && !titularTarjeta.trim().isEmpty() ? titularTarjeta : "Cliente Anónimo");
+
             // Últimos dígitos
             String ultimosDigitos = crearOrdenAnonimaDTO.getInfoPago().getUltimosDigitos();
-            infoPago.setUltimosDigitos(ultimosDigitos != null && !ultimosDigitos.trim().isEmpty() ? 
-                    ultimosDigitos : "****");
-            
+            infoPago.setUltimosDigitos(
+                    ultimosDigitos != null && !ultimosDigitos.trim().isEmpty() ? ultimosDigitos : "****");
+
             // ID de transacción
             String idTransaccion = crearOrdenAnonimaDTO.getInfoPago().getIdTransaccion();
-            infoPago.setIdTransaccion(idTransaccion != null && !idTransaccion.trim().isEmpty() ? 
-                    idTransaccion : UUID.randomUUID().toString());
+            infoPago.setIdTransaccion(idTransaccion != null && !idTransaccion.trim().isEmpty() ? idTransaccion
+                    : UUID.randomUUID().toString());
         }
-        
+
         // Verificar que los campos obligatorios no sean nulos antes de guardar
-        System.out.println("Verificando información de pago antes de guardar: metodoPagoId=" + 
+        System.out.println("Verificando información de pago antes de guardar: metodoPagoId=" +
                 infoPago.getMetodoPagoId());
-        
+
         infoPagoRepository.save(infoPago);
-        
+
         return convertirAOrdenDTO(nuevaOrden);
     }
 }

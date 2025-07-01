@@ -2,7 +2,9 @@ package com.rabbithole.productos.model;
 
 import jakarta.persistence.*;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
+import lombok.ToString;
 import lombok.AllArgsConstructor;
 import com.fasterxml.jackson.annotation.JsonBackReference;
 
@@ -20,6 +22,8 @@ import java.util.List;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
+@EqualsAndHashCode(exclude = { "thumbnails", "orden" })
+@ToString(exclude = { "thumbnails", "orden" })
 public class ItemOrden implements Serializable {
 
     private static final long serialVersionUID = 1L;
@@ -148,7 +152,7 @@ public class ItemOrden implements Serializable {
      * Lista de miniaturas del ítem (usualmente para diseños personalizados o
      * variantes).
      */
-    @OneToMany(mappedBy = "itemOrden", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
+    @OneToMany(mappedBy = "itemOrden", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     private List<ThumbnailItem> thumbnails = new ArrayList<>();
 
     /**

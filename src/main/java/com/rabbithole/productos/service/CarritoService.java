@@ -20,24 +20,27 @@ public class CarritoService {
 
     @Autowired
     private CarritoRepository carritoRepository;
-    
+
     @Autowired
     private UsuarioRepository usuarioRepository;
-    
+
     @Autowired
     private ProductoRepository productoRepository;
-    
+
     @Autowired
     private ColorRepository colorRepository;
-    
+
     @Autowired
     private TallaRepository tallaRepository;
-    
+
     @Autowired
     private TipoItemRepository tipoItemRepository;
-    
+
     @Autowired
     private DisenoPersonalizadoRepository disenoPersonalizadoRepository;
+
+    @Autowired
+    private ThumbnailItemService thumbnailItemService;
 
     /**
      * Obtiene todos los carritos de un usuario.
@@ -60,14 +63,14 @@ public class CarritoService {
     public Carrito obtenerOCrearCarritoActivo(Long usuarioId) {
         Usuario usuario = usuarioRepository.findById(usuarioId)
                 .orElseThrow(() -> new ResourceNotFoundException("Usuario no encontrado con ID: " + usuarioId));
-        
+
         List<Carrito> carritos = carritoRepository.findByUsuarioIdOrderByCreadoEnDesc(usuarioId);
-        
+
         // Si hay carritos existentes, retorna el más reciente
         if (!carritos.isEmpty()) {
             return carritos.get(0);
         }
-        
+
         // Si no hay carritos, crea uno nuevo
         Carrito nuevoCarrito = new Carrito();
         nuevoCarrito.setUsuario(usuario);
@@ -90,17 +93,17 @@ public class CarritoService {
     /**
      * Agrega un ítem de producto al carrito.
      * 
-     * @param carritoId ID del carrito
+     * @param carritoId  ID del carrito
      * @param productoId ID del producto
-     * @param colorId ID del color
-     * @param tallaId ID de la talla
+     * @param colorId    ID del color
+     * @param tallaId    ID de la talla
      * @param tipoItemId ID del tipo de ítem
-     * @param cantidad Cantidad del ítem
+     * @param cantidad   Cantidad del ítem
      * @return El carrito actualizado
      */
     @Transactional
-    public Carrito agregarProductoAlCarrito(Long carritoId, Long productoId, String colorId, String tallaId, 
-                                           Long tipoItemId, Integer cantidad) {
+    public Carrito agregarProductoAlCarrito(Long carritoId, Long productoId, String colorId, String tallaId,
+            Long tipoItemId, Integer cantidad) {
         // Obtener entidades
         Carrito carrito = obtenerCarritoPorId(carritoId);
         Producto producto = productoRepository.findById(productoId)
@@ -112,15 +115,15 @@ public class CarritoService {
         // Obtener el tipo de item
         TipoItem tipoItem = tipoItemRepository.findById(tipoItemId)
                 .orElseThrow(() -> new ResourceNotFoundException("Tipo de ítem no encontrado con ID: " + tipoItemId));
-        
+
         // Verificar si el ítem ya existe en el carrito
         Optional<ItemCarrito> itemExistente = carrito.getItems().stream()
                 .filter(item -> item.getProducto() != null && item.getProducto().getId().equals(productoId)
-                       && item.getColorId().equals(colorId) 
-                       && item.getTallaId().equals(tallaId)
-                       && item.getTipoItemId().equals(tipoItemId))
+                        && item.getColorId().equals(colorId)
+                        && item.getTallaId().equals(tallaId)
+                        && item.getTipoItemId().equals(tipoItemId))
                 .findFirst();
-        
+
         if (itemExistente.isPresent()) {
             // Actualizar cantidad
             ItemCarrito item = itemExistente.get();
@@ -133,38 +136,40 @@ public class CarritoService {
             nuevoItem.setColor(color);
             nuevoItem.setTalla(talla);
             nuevoItem.setTipoItem(tipoItem);
-            
+
             nuevoItem.setCantidad(cantidad);
             // Obtener precio desde el diseño personalizado
-            BigDecimal precioUnitario = producto.getDisenoPersonalizado() != null ? 
-                producto.getDisenoPersonalizado().getPrecio() : BigDecimal.ZERO;            
+            BigDecimal precioUnitario = producto.getDisenoPersonalizado() != null
+                    ? producto.getDisenoPersonalizado().getPrecio()
+                    : BigDecimal.ZERO;
             nuevoItem.setPrecioUnitario(precioUnitario);
-            
+
             carrito.addItem(nuevoItem);
         }
-        
+
         return carritoRepository.save(carrito);
     }
-    
+
     /**
      * Agrega un ítem con diseño personalizado al carrito.
      * 
-     * @param carritoId ID del carrito
+     * @param carritoId             ID del carrito
      * @param disenoPersonalizadoId ID del diseño personalizado
-     * @param colorId ID del color
-     * @param tallaId ID de la talla
-     * @param tipoItemId ID del tipo de ítem
-     * @param cantidad Cantidad del ítem
-     * @param precioUnitario Precio unitario del ítem personalizado
+     * @param colorId               ID del color
+     * @param tallaId               ID de la talla
+     * @param tipoItemId            ID del tipo de ítem
+     * @param cantidad              Cantidad del ítem
+     * @param precioUnitario        Precio unitario del ítem personalizado
      * @return El carrito actualizado
      */
     @Transactional
-    public Carrito agregarDisenoPersonalizadoAlCarrito(Long carritoId, Long disenoPersonalizadoId, 
+    public Carrito agregarDisenoPersonalizadoAlCarrito(Long carritoId, Long disenoPersonalizadoId,
             String colorId, String tallaId, Long tipoItemId, Integer cantidad, BigDecimal precioUnitario) {
         // Obtener entidades
         Carrito carrito = obtenerCarritoPorId(carritoId);
         DisenoPersonalizado diseno = disenoPersonalizadoRepository.findById(disenoPersonalizadoId)
-                .orElseThrow(() -> new ResourceNotFoundException("Diseño personalizado no encontrado con ID: " + disenoPersonalizadoId));
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Diseño personalizado no encontrado con ID: " + disenoPersonalizadoId));
         Color color = colorRepository.findById(colorId)
                 .orElseThrow(() -> new ResourceNotFoundException("Color no encontrado con ID: " + colorId));
         Talla talla = tallaRepository.findById(tallaId)
@@ -172,16 +177,16 @@ public class CarritoService {
         // Obtener el tipo de item
         TipoItem tipoItem = tipoItemRepository.findById(tipoItemId)
                 .orElseThrow(() -> new ResourceNotFoundException("Tipo de ítem no encontrado con ID: " + tipoItemId));
-        
+
         // Verificar si el ítem ya existe en el carrito
         Optional<ItemCarrito> itemExistente = carrito.getItems().stream()
-                .filter(item -> item.getDisenoPersonalizado() != null 
-                       && item.getDisenoPersonalizado().getId().equals(disenoPersonalizadoId)
-                       && item.getColorId().equals(colorId) 
-                       && item.getTallaId().equals(tallaId)
-                       && item.getTipoItemId().equals(tipoItemId))
+                .filter(item -> item.getDisenoPersonalizado() != null
+                        && item.getDisenoPersonalizado().getId().equals(disenoPersonalizadoId)
+                        && item.getColorId().equals(colorId)
+                        && item.getTallaId().equals(tallaId)
+                        && item.getTipoItemId().equals(tipoItemId))
                 .findFirst();
-        
+
         if (itemExistente.isPresent()) {
             // Actualizar cantidad
             ItemCarrito item = itemExistente.get();
@@ -194,48 +199,48 @@ public class CarritoService {
             nuevoItem.setColor(color);
             nuevoItem.setTalla(talla);
             nuevoItem.setTipoItem(tipoItem);
-            
+
             nuevoItem.setCantidad(cantidad);
-        
-        // Usar precio del diseño personalizado si no se proporciona un precio válido
-        if (precioUnitario == null || precioUnitario.compareTo(BigDecimal.ZERO) <= 0) {
-            // Si el diseño personalizado tiene un precio asignado, usarlo
-            if (diseno.getPrecio() != null && diseno.getPrecio().compareTo(BigDecimal.ZERO) > 0) {
-                nuevoItem.setPrecioUnitario(diseno.getPrecio());
-                System.out.println("Usando precio del diseño personalizado: " + diseno.getPrecio());
+
+            // Usar precio del diseño personalizado si no se proporciona un precio válido
+            if (precioUnitario == null || precioUnitario.compareTo(BigDecimal.ZERO) <= 0) {
+                // Si el diseño personalizado tiene un precio asignado, usarlo
+                if (diseno.getPrecio() != null && diseno.getPrecio().compareTo(BigDecimal.ZERO) > 0) {
+                    nuevoItem.setPrecioUnitario(diseno.getPrecio());
+                    System.out.println("Usando precio del diseño personalizado: " + diseno.getPrecio());
+                } else {
+                    // Precio por defecto
+                    nuevoItem.setPrecioUnitario(new BigDecimal("29.99"));
+                    System.out.println("Usando precio por defecto para diseño personalizado");
+                }
             } else {
-                // Precio por defecto
-                nuevoItem.setPrecioUnitario(new BigDecimal("29.99"));
-                System.out.println("Usando precio por defecto para diseño personalizado");
+                nuevoItem.setPrecioUnitario(precioUnitario);
             }
-        } else {
-            nuevoItem.setPrecioUnitario(precioUnitario);
+
+            carrito.addItem(nuevoItem);
         }
-        
-        carrito.addItem(nuevoItem);
-        }
-        
+
         return carritoRepository.save(carrito);
     }
-    
+
     /**
      * Actualiza la cantidad de un ítem en el carrito.
      * 
-     * @param carritoId ID del carrito
-     * @param itemId ID del ítem
+     * @param carritoId     ID del carrito
+     * @param itemId        ID del ítem
      * @param nuevaCantidad Nueva cantidad del ítem
      * @return El carrito actualizado
      */
     @Transactional
     public Carrito actualizarCantidadItem(Long carritoId, Long itemId, Integer nuevaCantidad) {
         Carrito carrito = obtenerCarritoPorId(carritoId);
-        
+
         // Buscar el ítem en el carrito
         ItemCarrito item = carrito.getItems().stream()
                 .filter(i -> i.getId().equals(itemId))
                 .findFirst()
                 .orElseThrow(() -> new ResourceNotFoundException("Ítem no encontrado en el carrito con ID: " + itemId));
-        
+
         if (nuevaCantidad <= 0) {
             // Si la cantidad es 0 o negativa, eliminar el ítem
             carrito.removeItem(item);
@@ -243,33 +248,36 @@ public class CarritoService {
             // Actualizar la cantidad
             item.setCantidad(nuevaCantidad);
         }
-        
+
         return carritoRepository.save(carrito);
     }
-    
+
     /**
      * Elimina un ítem del carrito.
      * 
      * @param carritoId ID del carrito
-     * @param itemId ID del ítem a eliminar
+     * @param itemId    ID del ítem a eliminar
      * @return El carrito actualizado
      */
     @Transactional
     public Carrito eliminarItemDelCarrito(Long carritoId, Long itemId) {
         Carrito carrito = obtenerCarritoPorId(carritoId);
-        
+
         // Buscar el ítem en el carrito
         ItemCarrito item = carrito.getItems().stream()
                 .filter(i -> i.getId().equals(itemId))
                 .findFirst()
                 .orElseThrow(() -> new ResourceNotFoundException("Ítem no encontrado en el carrito con ID: " + itemId));
-        
+
         // Eliminar el ítem
+        if (item.getThumbnails() != null) {
+            thumbnailItemService.deleteThumbnailsByItemCarritoId(itemId);
+        }
         carrito.removeItem(item);
-        
+
         return carritoRepository.save(carrito);
     }
-    
+
     /**
      * Vacía un carrito eliminando todos sus ítems.
      * 
@@ -277,15 +285,22 @@ public class CarritoService {
      * @return El carrito vacío
      */
     @Transactional
-    public Carrito vaciarCarrito(Long carritoId) {
+    public Carrito vaciarCarrito(Long carritoId, boolean isOrdenMigration) {
         Carrito carrito = obtenerCarritoPorId(carritoId);
-        
+
         // Limpiar todos los ítems
+        if (!isOrdenMigration) {
+            carrito.getItems().forEach(item -> {
+                if (item.getThumbnails() != null) {
+                    thumbnailItemService.deleteThumbnailsByItemCarritoId(item.getId());
+                }
+            });
+        }
         carrito.getItems().clear();
-        
+
         return carritoRepository.save(carrito);
     }
-    
+
     /**
      * Elimina un carrito.
      * 
@@ -297,7 +312,13 @@ public class CarritoService {
         if (!carritoRepository.existsById(carritoId)) {
             throw new ResourceNotFoundException("Carrito no encontrado con ID: " + carritoId);
         }
-        
+        if (carritoRepository.findById(carritoId).get().getItems() != null) {
+            carritoRepository.findById(carritoId).get().getItems().forEach(item -> {
+                if (item.getThumbnails() != null) {
+                    thumbnailItemService.deleteThumbnailsByItemCarritoId(item.getId());
+                }
+            });
+        }
         carritoRepository.deleteById(carritoId);
     }
 }

@@ -23,12 +23,12 @@ import java.util.List;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-@EqualsAndHashCode(onlyExplicitlyIncluded = false)
 public class Orden implements Serializable {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "id")
+    @EqualsAndHashCode.Include
     private Long id;
 
     /**
@@ -37,6 +37,8 @@ public class Orden implements Serializable {
      */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "usuario_id")
+    @EqualsAndHashCode.Exclude
+    @ToString.Exclude
     private Usuario usuario;
 
     /**
@@ -46,30 +48,36 @@ public class Orden implements Serializable {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "estado_id", nullable = false)
     @com.fasterxml.jackson.annotation.JsonBackReference
+    @EqualsAndHashCode.Exclude
+    @ToString.Exclude
     private EstadoOrden estado;
 
     /**
      * Precio total de la orden.
      */
     @Column(name = "precio_total", nullable = false, precision = 10, scale = 2)
+    @EqualsAndHashCode.Include
     private BigDecimal precioTotal;
 
     /**
      * Código de seguimiento único para la orden.
      */
     @Column(name = "codigo_seguimiento", length = 50, unique = true)
+    @EqualsAndHashCode.Include
     private String codigoSeguimiento;
 
     /**
      * Fecha de creación de la orden.
      */
     @Column(name = "creado_en", nullable = false, updatable = false)
+    @EqualsAndHashCode.Include
     private LocalDateTime creadoEn;
 
     /**
      * Fecha de última actualización de la orden.
      */
     @Column(name = "actualizado_en", nullable = false)
+    @EqualsAndHashCode.Exclude  // Excluir porque cambia frecuentemente
     private LocalDateTime actualizadoEn;
 
     /**
@@ -78,6 +86,8 @@ public class Orden implements Serializable {
      */
     @OneToMany(mappedBy = "orden", cascade = CascadeType.ALL, orphanRemoval = true)
     @JsonManagedReference
+    @EqualsAndHashCode.Exclude
+    @ToString.Exclude
     private List<ItemOrden> items = new ArrayList<>();
 
     /**
@@ -85,8 +95,10 @@ public class Orden implements Serializable {
      */
     @OneToMany(mappedBy = "orden", cascade = CascadeType.ALL, orphanRemoval = true)
     @JsonManagedReference
+    @EqualsAndHashCode.Exclude
+    @ToString.Exclude
     private List<HistorialEstadosOrden> historialEstados = new ArrayList<>();
-    
+
     /**
      * Información de envío asociada a esta orden.
      * Relación One-to-One con InfoEnvio.
@@ -96,7 +108,7 @@ public class Orden implements Serializable {
     @EqualsAndHashCode.Exclude
     @ToString.Exclude
     private InfoEnvio infoEnvio;
-    
+
     /**
      * Información de pago asociada a esta orden.
      * Relación One-to-One con InfoPago.
@@ -118,7 +130,8 @@ public class Orden implements Serializable {
     }
 
     /**
-     * Método callback que se ejecuta antes de la actualización de un registro existente.
+     * Método callback que se ejecuta antes de la actualización de un registro
+     * existente.
      * Actualiza la fecha de última actualización.
      */
     @PreUpdate

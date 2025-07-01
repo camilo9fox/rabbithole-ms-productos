@@ -2,7 +2,9 @@ package com.rabbithole.productos.model;
 
 import jakarta.persistence.*;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
+import lombok.ToString;
 import lombok.AllArgsConstructor;
 import com.fasterxml.jackson.annotation.JsonBackReference;
 
@@ -10,7 +12,8 @@ import java.io.Serializable;
 import java.time.LocalDateTime;
 
 /**
- * Entidad que representa el historial de cambios de estado de una orden en la base de datos.
+ * Entidad que representa el historial de cambios de estado de una orden en la
+ * base de datos.
  * Mapea a la tabla "historial_estados_orden".
  */
 @Entity
@@ -18,6 +21,8 @@ import java.time.LocalDateTime;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
+@EqualsAndHashCode(exclude = { "orden", "estado" })
+@ToString(exclude = { "orden", "estado" })
 public class HistorialEstadosOrden implements Serializable {
 
     private static final long serialVersionUID = 1L;
@@ -29,7 +34,8 @@ public class HistorialEstadosOrden implements Serializable {
 
     /**
      * Orden a la que pertenece este registro de historial.
-     * La relación es Many-to-One (muchos registros de historial pueden pertenecer a una orden).
+     * La relación es Many-to-One (muchos registros de historial pueden pertenecer a
+     * una orden).
      */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "orden_id", nullable = false)
@@ -38,7 +44,8 @@ public class HistorialEstadosOrden implements Serializable {
 
     /**
      * Estado al que cambió la orden.
-     * La relación es Many-to-One (muchos registros de historial pueden tener el mismo estado).
+     * La relación es Many-to-One (muchos registros de historial pueden tener el
+     * mismo estado).
      */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "estado_id", nullable = false)

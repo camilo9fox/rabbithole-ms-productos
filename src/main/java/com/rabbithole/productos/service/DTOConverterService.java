@@ -442,4 +442,48 @@ public class DTOConverterService {
 
         return dto;
     }
+    
+    /**
+     * Convierte una entidad InfoEnvio a InfoEnvioDTO
+     * 
+     * @param infoEnvio Entidad InfoEnvio
+     * @return DTO de la información de envío
+     */
+    public InfoEnvioDTO convertToInfoEnvioDTO(InfoEnvio infoEnvio) {
+        if (infoEnvio == null) {
+            return null;
+        }
+        
+        InfoEnvioDTO dto = new InfoEnvioDTO();
+        dto.setNombreCompleto(infoEnvio.getNombreCompleto());
+        dto.setDireccion(infoEnvio.getDireccion());
+        dto.setCiudad(infoEnvio.getCiudad());
+        dto.setEstado(infoEnvio.getEstado());
+        dto.setCodigoPostal(infoEnvio.getCodigoPostal());
+        dto.setPais(infoEnvio.getPais());
+        dto.setTelefono(infoEnvio.getTelefono());
+        dto.setEmail(infoEnvio.getEmail());
+        
+        return dto;
+    }
+    
+    /**
+     * Convierte una entidad InfoPago a InfoPagoDTO
+     * 
+     * @param infoPago Entidad InfoPago
+     * @return DTO de la información de pago
+     */
+    public InfoPagoDTO convertToInfoPagoDTO(InfoPago infoPago) {
+        if (infoPago == null) {
+            return null;
+        }
+        
+        InfoPagoDTO dto = new InfoPagoDTO();
+        dto.setMetodoPagoId(infoPago.getMetodoPagoId());
+        dto.setUltimosDigitos(infoPago.getUltimosDigitos());
+        dto.setTitularTarjeta(infoPago.getTitularTarjeta());
+        dto.setIdTransaccion(infoPago.getIdTransaccion());
+        
+        return dto;
+    }
 }

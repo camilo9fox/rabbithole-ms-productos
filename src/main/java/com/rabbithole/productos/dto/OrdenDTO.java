@@ -16,6 +16,8 @@ public class OrdenDTO {
     private String estado;
     private String direccionEntrega;
     private String metodoPago;
+    private InfoEnvioDTO infoEnvio;
+    private InfoPagoDTO infoPago;
     private List<ItemOrdenDTO> items;
     
     // Getters y Setters
@@ -81,6 +83,22 @@ public class OrdenDTO {
     
     public void setMetodoPago(String metodoPago) {
         this.metodoPago = metodoPago;
+    }
+    
+    public InfoEnvioDTO getInfoEnvio() {
+        return infoEnvio;
+    }
+    
+    public void setInfoEnvio(InfoEnvioDTO infoEnvio) {
+        this.infoEnvio = infoEnvio;
+    }
+    
+    public InfoPagoDTO getInfoPago() {
+        return infoPago;
+    }
+    
+    public void setInfoPago(InfoPagoDTO infoPago) {
+        this.infoPago = infoPago;
     }
     
     public List<ItemOrdenDTO> getItems() {
