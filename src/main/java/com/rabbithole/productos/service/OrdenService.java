@@ -6,9 +6,12 @@ import com.rabbithole.productos.dto.CrearOrdenDTO;
 import com.rabbithole.productos.dto.CrearOrdenAnonimaDTO;
 import com.rabbithole.productos.dto.ItemCarritoMemoriaDTO;
 import com.rabbithole.productos.exception.ResourceNotFoundException;
+import com.rabbithole.productos.kafka.KafkaProducerService;
+import com.rabbithole.productos.kafka.OrderEventDTO;
 import com.rabbithole.productos.model.*;
 import com.rabbithole.productos.repository.*;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -33,7 +36,8 @@ public class OrdenService {
 
     // Logger para registros
     private static final Logger logger = LoggerFactory.getLogger(OrdenService.class);
-
+    @Autowired
+    private KafkaProducerService kafkaProducerService;
     // Constantes para estados de orden
     private static final String ESTADO_PENDIENTE_NOMBRE = "PENDIENTE";
     private static final String ESTADO_PENDIENTE_CODIGO = "1 PENDING";
@@ -442,9 +446,13 @@ public class OrdenService {
 
         // Vaciar el carrito después de crear la orden
         carritoService.vaciarCarrito(carrito.getId(), true);
-
+        OrdenDTO ordenDTO = convertirAOrdenDTO(nuevaOrden);
+        OrderEventDTO orderEventDTO = new OrderEventDTO("CREATED", ordenDTO.getInfoEnvio().getEmail(),
+                ordenDTO.getInfoEnvio().getNombreCompleto(), ordenDTO.getTotal(), "CLP",
+                ordenDTO.getItems(), null);
+        kafkaProducerService.sendOrderEvent(orderEventDTO);
         // Convertir y retornar la orden como DTO
-        return convertirAOrdenDTO(nuevaOrden);
+        return ordenDTO;
     }
 
     /**
@@ -472,7 +480,12 @@ public class OrdenService {
         // Actualizar el estado actual de la orden
         orden.setEstado(nuevoEstado);
         orden = ordenRepository.save(orden);
-        return convertirAOrdenDTO(orden);
+        OrdenDTO ordenDTO = convertirAOrdenDTO(orden);
+        OrderEventDTO orderEventDTO = new OrderEventDTO("UPDATED", ordenDTO.getInfoEnvio().getEmail(),
+                ordenDTO.getInfoEnvio().getNombreCompleto(), ordenDTO.getTotal(), "CLP",
+                ordenDTO.getItems(), null);
+        kafkaProducerService.sendOrderEvent(orderEventDTO);
+        return ordenDTO;
     }
 
     /**
@@ -878,7 +891,11 @@ public class OrdenService {
                 infoPago.getMetodoPagoId());
 
         infoPagoRepository.save(infoPago);
-
-        return convertirAOrdenDTO(nuevaOrden);
+        OrdenDTO ordenDTO = convertirAOrdenDTO(nuevaOrden);
+        OrderEventDTO orderEventDTO2 = new OrderEventDTO("CREATED", ordenDTO.getInfoEnvio().getEmail(),
+                ordenDTO.getInfoEnvio().getNombreCompleto(), ordenDTO.getTotal(), "CLP",
+                ordenDTO.getItems(), null);
+        kafkaProducerService.sendOrderEvent(orderEventDTO2);
+        return ordenDTO;
     }
 }
