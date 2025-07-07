@@ -5,6 +5,8 @@ import com.rabbithole.productos.model.DisenoPersonalizado;
 import com.rabbithole.productos.model.Producto;
 import com.rabbithole.productos.repository.CategoriaRepository;
 import com.rabbithole.productos.repository.DisenoPersonalizadoRepository;
+import com.rabbithole.productos.repository.ItemCarritoRepository;
+import com.rabbithole.productos.repository.ItemOrdenRepository;
 import com.rabbithole.productos.repository.ProductoRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -28,15 +30,21 @@ public class ProductoService {
     private final ProductoRepository productoRepository;
     private final CategoriaRepository categoriaRepository;
     private final DisenoPersonalizadoRepository disenoPersonalizadoRepository;
+    private final ItemCarritoRepository itemCarritoRepository;
+    private final ItemOrdenRepository itemOrdenRepository;
 
     @Autowired
     public ProductoService(
             ProductoRepository productoRepository,
             CategoriaRepository categoriaRepository,
-            DisenoPersonalizadoRepository disenoPersonalizadoRepository) {
+            DisenoPersonalizadoRepository disenoPersonalizadoRepository,
+            ItemCarritoRepository itemCarritoRepository,
+            ItemOrdenRepository itemOrdenRepository) {
         this.productoRepository = productoRepository;
         this.categoriaRepository = categoriaRepository;
         this.disenoPersonalizadoRepository = disenoPersonalizadoRepository;
+        this.itemCarritoRepository = itemCarritoRepository;
+        this.itemOrdenRepository = itemOrdenRepository;
     }
 
     /**
@@ -147,15 +155,29 @@ public class ProductoService {
      * @param id ID del producto a eliminar
      * @return true si se eliminÃ³ correctamente, false si no existÃ­a
      */
+    /**
+     * Elimina un producto si no está referenciado en Items de carrito u orden.
+     * @param id identificador del producto.
+     * @return true si se eliminó; false si no existe o está referenciado.
+     */
     public boolean deleteProducto(Long id) {
         log.debug("Eliminando producto con ID: {}", id);
         
-        if (productoRepository.existsById(id)) {
-            productoRepository.deleteById(id);
-            return true;
+        if (!productoRepository.existsById(id)) {
+            log.warn("Producto con ID {} no existe", id);
+            return false;
         }
-        
-        return false;
+
+        // Verificar referencias en carrito u orden
+        boolean referenciado = itemCarritoRepository.existsByProductoId(id) ||
+                               itemOrdenRepository.existsByProductoId(id);
+        if (referenciado) {
+            log.warn("No se puede eliminar el producto {} porque está referenciado en carritos u órdenes", id);
+            return false;
+        }
+
+        productoRepository.deleteById(id);
+        return true;
     }
     
     /**

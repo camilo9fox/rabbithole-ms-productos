@@ -450,7 +450,7 @@ public class OrdenService {
         OrderEventDTO orderEventDTO = new OrderEventDTO("CREATED", ordenDTO.getInfoEnvio().getEmail(),
                 ordenDTO.getInfoEnvio().getNombreCompleto(), ordenDTO.getTotal(), "CLP",
                 ordenDTO.getItems(), null);
-        kafkaProducerService.sendOrderEvent(orderEventDTO);
+        // kafkaProducerService.sendOrderEvent(orderEventDTO);
         // Convertir y retornar la orden como DTO
         return ordenDTO;
     }
@@ -483,8 +483,8 @@ public class OrdenService {
         OrdenDTO ordenDTO = convertirAOrdenDTO(orden);
         OrderEventDTO orderEventDTO = new OrderEventDTO("UPDATED", ordenDTO.getInfoEnvio().getEmail(),
                 ordenDTO.getInfoEnvio().getNombreCompleto(), ordenDTO.getTotal(), "CLP",
-                ordenDTO.getItems(), null);
-        kafkaProducerService.sendOrderEvent(orderEventDTO);
+                ordenDTO.getItems(), ordenDTO.getEstado());
+        // kafkaProducerService.sendOrderEvent(orderEventDTO);
         return ordenDTO;
     }
 
@@ -895,7 +895,7 @@ public class OrdenService {
         OrderEventDTO orderEventDTO2 = new OrderEventDTO("CREATED", ordenDTO.getInfoEnvio().getEmail(),
                 ordenDTO.getInfoEnvio().getNombreCompleto(), ordenDTO.getTotal(), "CLP",
                 ordenDTO.getItems(), null);
-        kafkaProducerService.sendOrderEvent(orderEventDTO2);
+        // kafkaProducerService.sendOrderEvent(orderEventDTO2);
         return ordenDTO;
     }
 }

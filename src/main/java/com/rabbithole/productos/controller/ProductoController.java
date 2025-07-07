@@ -141,13 +141,15 @@ public class ProductoController {
      * @return 204 No Content si se eliminÃ³ correctamente, 404 si no existÃ­a
      */
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> deleteProducto(@PathVariable Long id) {
+    public ResponseEntity<Map<String, Boolean>> deleteProducto(@PathVariable Long id) {
         log.debug("REST request para eliminar Producto ID: {}", id);
         
-        if (productoService.deleteProducto(id)) {
-            return ResponseEntity.noContent().build();
+        boolean eliminado = productoService.deleteProducto(id);
+        if (eliminado) {
+            return ResponseEntity.ok(Map.of("deleted", true));
         } else {
-            return ResponseEntity.notFound().build();
+            // Puede ser inexistente o referenciado; devolvemos 409 para alertar conflicto.
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("deleted", false));
         }
     }
     
