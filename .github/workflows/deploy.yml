@@ -55,7 +55,8 @@ jobs:
 
             # 2) docker login & pull latest image
             docker login -u ${{ secrets.DOCKERHUB_USERNAME }} -p ${{ secrets.DOCKERHUB_TOKEN }}
-            # ensure network exists
+            # ensure networks exist
+            docker network inspect kafka_kafka_network >/dev/null 2>&1 || docker network create kafka_kafka_network
             docker network inspect rabbit-net >/dev/null 2>&1 || docker network create rabbit-net
             docker pull ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:latest
 
@@ -64,11 +65,15 @@ jobs:
 
             # 4) run new container attached to rabbit-net and bound to localhost 8081
             docker run -d --name productos \
-              --network rabbit-net \
+              --network kafka_kafka_network \
+              -e SPRING_KAFKA_BOOTSTRAP_SERVERS="kafka-1:9092,kafka-2:9092,kafka-3:9092" \
               -p 127.0.0.1:8081:8081 \
               --restart=always \
               --env-file ~/productos.env \
               ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:latest
+
+            # attach second network
+            docker network connect rabbit-net productos
 
             # 5) reload nginx (if routing through gateway) – optional
             sudo systemctl reload nginx || true
