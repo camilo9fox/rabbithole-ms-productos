@@ -990,7 +990,7 @@ public class ProductoPersonalizadoServiceImpl implements ProductoPersonalizadoSe
                     disenoActualizado.getDetalle(),
                     nuevoEstado.getCodigo(),
                     previewUrlRef.get());
-            // kafkaProducerService.sendDisenoEvent(disenoEventDTO);
+            kafkaProducerService.sendDisenoEvent(disenoEventDTO);
             return mapper.toDTO(disenoActualizado);
         } catch (Exception e) {
             log.error("Error al actualizar estado del diseño personalizado: {}", e.getMessage(), e);
