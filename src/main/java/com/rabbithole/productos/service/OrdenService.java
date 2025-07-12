@@ -592,7 +592,15 @@ public class OrdenService {
 
         // Crear una nueva orden
         Orden nuevaOrden = new Orden();
-        // No asignamos usuario ya que es una orden anónima
+
+        // Asignar usuario si se proporciona usuarioId (orden puede ser "semi-anónima")
+        if (crearOrdenAnonimaDTO.getUsuarioId() != null) {
+            Usuario usuario = usuarioRepository.findById(crearOrdenAnonimaDTO.getUsuarioId())
+                    .orElseThrow(() -> new ResourceNotFoundException(
+                            "Usuario no encontrado con ID: " + crearOrdenAnonimaDTO.getUsuarioId()));
+            nuevaOrden.setUsuario(usuario);
+        }
+
         nuevaOrden.setEstado(estadoInicial);
         nuevaOrden.setCodigoSeguimiento("ORD-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase());
 

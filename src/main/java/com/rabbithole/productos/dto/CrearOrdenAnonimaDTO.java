@@ -29,4 +29,9 @@ public class CrearOrdenAnonimaDTO {
      * Información de pago para la orden
      */
     private InfoPagoDTO infoPago;
+    
+    /**
+     * (Opcional) ID del usuario si se desea asociar la orden anónima a un usuario existente.
+     */
+    private Long usuarioId;
 }
